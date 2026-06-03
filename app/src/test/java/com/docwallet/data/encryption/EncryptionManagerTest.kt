@@ -221,4 +221,26 @@ class EncryptionManagerTest {
         manager.initializeDeviceKeyMode()
         assertTrue(manager.disablePassword())
     }
+
+    @Test
+    fun `full password lifecycle survives simulated app restart`() {
+        manager.initializeDeviceKeyMode()
+        manager.setPassword("test_password123")
+        val originalKey = manager.getMasterKeyForSession()
+        assertNotNull(originalKey)
+
+        val context = RuntimeEnvironment.getApplication().applicationContext
+        val freshManager = EncryptionManager(context, mockHasher)
+
+        assertFalse(freshManager.isFirstLaunch())
+        assertTrue(freshManager.isPasswordSet())
+
+        assertTrue(freshManager.verifyPassword("test_password123"))
+
+        val restoredKey = freshManager.getMasterKeyForSession()
+        assertNotNull(restoredKey)
+        assertEquals(32, restoredKey!!.size)
+
+        assertArrayEquals(originalKey, restoredKey)
+    }
 }
