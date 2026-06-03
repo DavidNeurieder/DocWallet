@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -84,6 +85,15 @@ dependencies {
     implementation(libs.sqlite.ktx)
     implementation(libs.documentfile)
     implementation(libs.argon2kt)
+    implementation(libs.commonmark)
+    implementation(libs.zxing.core)
+    implementation(libs.commons.compress)
+    implementation(libs.pdfbox.android)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.work.runtime)
+    implementation(libs.preference.ktx)
+    implementation(libs.coil.core)
+    implementation(libs.coil.compose)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)

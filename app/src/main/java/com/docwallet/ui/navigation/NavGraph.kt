@@ -4,13 +4,22 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.docwallet.ui.library.LibraryScreen
+import com.docwallet.ui.search.SearchScreen
+import com.docwallet.ui.settings.SettingsScreen
 import com.docwallet.ui.unlock.PasswordSetupScreen
 import com.docwallet.ui.unlock.UnlockScreen
+import com.docwallet.ui.viewer.ViewerScreen
 
 object Routes {
     const val UNLOCK = "unlock"
     const val PASSWORD_SETUP = "password_setup"
     const val LIBRARY = "library"
+    const val VIEWER = "viewer/{documentId}"
+    const val SETTINGS = "settings"
+    const val SEARCH = "search"
+
+    fun viewer(documentId: String) = "viewer/$documentId"
 }
 
 @Composable
@@ -43,8 +52,34 @@ fun DocWalletNavGraph(
             )
         }
         composable(Routes.LIBRARY) {
-            // Placeholder - will be replaced with real library screen
-            androidx.compose.material3.Text("Library coming soon")
+            LibraryScreen(
+                onDocumentClick = { navController.navigate(Routes.viewer(it)) },
+                onSettingsClick = { navController.navigate(Routes.SETTINGS) },
+                onSearchClick = { navController.navigate(Routes.SEARCH) },
+                onNewNoteClick = {
+                    val newId = java.util.UUID.randomUUID().toString()
+                    navController.navigate(Routes.viewer(newId))
+                },
+            )
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onExportBackup = { /* TODO */ },
+                onImportBackup = { /* TODO */ },
+            )
+        }
+        composable(Routes.SEARCH) {
+            SearchScreen(
+                onDocumentClick = { navController.navigate(Routes.viewer(it)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.VIEWER) { backStackEntry ->
+            ViewerScreen(
+                documentId = backStackEntry.arguments?.getString("documentId") ?: "",
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }

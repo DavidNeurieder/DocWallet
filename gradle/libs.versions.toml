@@ -14,6 +14,12 @@ pdfbox = "2.0.27.0"
 documentfile = "1.0.1"
 coil = "2.5.0"
 argon2kt = "1.4.0"
+commonmark = "0.21.0"
+zxing = "3.5.2"
+commonsCompress = "1.25.0"
+kotlinSerializationJson = "1.6.2"
+work = "2.9.0"
+preference = "1.2.1"
 
 # Test
 junit = "4.13.2"
@@ -46,7 +52,14 @@ sqlite-ktx = { group = "androidx.sqlite", name = "sqlite-ktx", version.ref = "sq
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
 documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil-core = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 argon2kt = { group = "com.lambdapioneer.argon2kt", name = "argon2kt", version.ref = "argon2kt" }
+commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinSerializationJson" }
+work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+preference-ktx = { group = "androidx.preference", name = "preference-ktx", version.ref = "preference" }
 
 # Test
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -64,4 +77,5 @@ compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-mani
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version = "1.9.22-1.0.17" }
