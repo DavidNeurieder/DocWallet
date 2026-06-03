@@ -1,11 +1,7 @@
 package com.docwallet.data.encryption
 
 import android.app.Application
-import com.lambdapioneer.argon2kt.Argon2Kt
-import com.lambdapioneer.argon2kt.Argon2KtResult
-import com.lambdapioneer.argon2kt.Argon2Mode
 import io.mockk.*
-import java.nio.ByteBuffer
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -20,31 +16,30 @@ import org.robolectric.annotation.Config
 class EncryptionManagerTest {
 
     private lateinit var manager: EncryptionManager
+    private lateinit var mockHasher: Argon2Hasher
 
     @Before
     fun setUp() {
-        mockkConstructor(Argon2Kt::class)
-        every { anyConstructed<Argon2Kt>().hash(
-            mode = any<Argon2Mode>(),
-            password = any<ByteArray>(),
-            salt = any<ByteArray>(),
-            tCostInIterations = any<Int>(),
-            mCostInKibibyte = any<Int>(),
-            parallelism = any<Int>(),
-            hashLengthInBytes = any<Int>(),
+        mockHasher = mockk()
+        every { mockHasher.hash(
+            password = any(),
+            salt = any(),
+            tCostInIterations = any(),
+            mCostInKibibyte = any(),
+            parallelism = any(),
+            hashLengthInBytes = any(),
         ) } answers {
-            val password = arg<ByteArray>(1)
-            val salt = arg<ByteArray>(2)
-            val hashLen = arg<Int>(6)
-            val hash = ByteArray(hashLen) { i ->
+            val password = arg<ByteArray>(0)
+            val salt = arg<ByteArray>(1)
+            val hashLen = arg<Int>(5)
+            ByteArray(hashLen) { i ->
                 (password.getOrElse(i % password.size) { 0 } +
                  salt.getOrElse(i % salt.size) { 0 } + i).toByte()
             }
-            Argon2KtResult(ByteBuffer.wrap(hash), ByteBuffer.wrap(byteArrayOf()))
         }
 
         val context = RuntimeEnvironment.getApplication().applicationContext
-        manager = EncryptionManager(context)
+        manager = EncryptionManager(context, mockHasher)
     }
 
     @After

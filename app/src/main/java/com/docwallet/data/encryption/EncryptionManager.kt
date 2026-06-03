@@ -2,8 +2,6 @@ package com.docwallet.data.encryption
 
 import android.content.Context
 import android.util.Log
-import com.lambdapioneer.argon2kt.Argon2Kt
-import com.lambdapioneer.argon2kt.Argon2Mode
 import java.io.File
 import java.security.SecureRandom
 import javax.crypto.Cipher
@@ -11,7 +9,10 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 
-class EncryptionManager(private val context: Context) {
+class EncryptionManager(
+    private val context: Context,
+    private val argon2Hasher: Argon2Hasher = Argon2HasherImpl(),
+) {
 
     companion object {
         private const val TAG = "EncryptionManager"
@@ -180,9 +181,7 @@ class EncryptionManager(private val context: Context) {
     }
 
     private fun deriveKey(password: String, salt: ByteArray): ByteArray {
-        val argon2Kt = Argon2Kt()
-        val hash = argon2Kt.hash(
-            mode = Argon2Mode.ARGON2_ID,
+        return argon2Hasher.hash(
             password = password.toByteArray(),
             salt = salt,
             tCostInIterations = ARGON_ITERATIONS,
@@ -190,7 +189,6 @@ class EncryptionManager(private val context: Context) {
             parallelism = ARGON_PARALLELISM,
             hashLengthInBytes = KEY_SIZE / 8,
         )
-        return hash.rawHashAsByteArray()
     }
 
     private fun wrapKey(key: ByteArray, wrappingKey: ByteArray): ByteArray {
