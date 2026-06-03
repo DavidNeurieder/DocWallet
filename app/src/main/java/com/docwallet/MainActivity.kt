@@ -1,5 +1,7 @@
 package com.docwallet
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,9 +20,13 @@ import com.docwallet.ui.navigation.DocWalletNavGraph
 import com.docwallet.ui.navigation.Routes
 
 class MainActivity : ComponentActivity() {
+    private var pendingShareUri by mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        handleShareIntent(intent)
 
         val app = application as DocWalletApplication
 
@@ -51,8 +57,34 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             startDestination = startDestination,
                             onUnlocked = { /* handled in NavGraph */ },
+                            pendingImportUri = pendingShareUri,
+                            onPendingImportConsumed = { pendingShareUri = null },
                         )
                     }
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleShareIntent(intent)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun handleShareIntent(intent: Intent) {
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                if (uri != null) {
+                    pendingShareUri = uri
+                }
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                val first = uris?.firstOrNull()
+                if (first != null) {
+                    pendingShareUri = first
                 }
             }
         }

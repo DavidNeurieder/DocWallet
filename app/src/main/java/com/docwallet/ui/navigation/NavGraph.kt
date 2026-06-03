@@ -1,12 +1,15 @@
 package com.docwallet.ui.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.docwallet.ui.collection.CollectionScreen
 import com.docwallet.ui.library.LibraryScreen
 import com.docwallet.ui.search.SearchScreen
 import com.docwallet.ui.settings.SettingsScreen
+import com.docwallet.ui.tag.TagScreen
 import com.docwallet.ui.unlock.PasswordSetupScreen
 import com.docwallet.ui.unlock.UnlockScreen
 import com.docwallet.ui.viewer.ViewerScreen
@@ -18,6 +21,8 @@ object Routes {
     const val VIEWER = "viewer/{documentId}"
     const val SETTINGS = "settings"
     const val SEARCH = "search"
+    const val COLLECTIONS = "collections"
+    const val TAGS = "tags"
 
     fun viewer(documentId: String) = "viewer/$documentId"
 }
@@ -27,6 +32,8 @@ fun DocWalletNavGraph(
     navController: NavHostController,
     startDestination: String,
     onUnlocked: () -> Unit,
+    pendingImportUri: Uri? = null,
+    onPendingImportConsumed: () -> Unit = {},
 ) {
     NavHost(
         navController = navController,
@@ -60,13 +67,27 @@ fun DocWalletNavGraph(
                     val newId = java.util.UUID.randomUUID().toString()
                     navController.navigate(Routes.viewer(newId))
                 },
+                pendingImportUri = pendingImportUri,
+                onPendingImportConsumed = onPendingImportConsumed,
+            )
+        }
+        composable(Routes.COLLECTIONS) {
+            CollectionScreen(
+                onBack = { navController.popBackStack() },
+                onCollectionClick = { },
+            )
+        }
+        composable(Routes.TAGS) {
+            TagScreen(
+                onBack = { navController.popBackStack() },
+                onTagClick = { },
             )
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onExportBackup = { /* TODO */ },
-                onImportBackup = { /* TODO */ },
+                onCollectionsClick = { navController.navigate(Routes.COLLECTIONS) },
+                onTagsClick = { navController.navigate(Routes.TAGS) },
             )
         }
         composable(Routes.SEARCH) {

@@ -1,5 +1,8 @@
 package com.docwallet.ui.library
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,10 +42,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +62,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.docwallet.data.model.DocumentType
 import com.docwallet.ui.common.EmptyState
 
+private val IMPORT_MIME_TYPES = arrayOf(
+    "application/pdf",
+    "application/epub+zip",
+    "application/vnd.apple.pkpass",
+    "application/vnd.comicbook+zip",
+    "application/x-cbr",
+    "image/*",
+    "text/markdown",
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
@@ -63,6 +79,8 @@ fun LibraryScreen(
     onSettingsClick: () -> Unit,
     onSearchClick: () -> Unit = {},
     onNewNoteClick: () -> Unit = {},
+    pendingImportUri: Uri? = null,
+    onPendingImportConsumed: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(),
 ) {
     val documents by viewModel.documents.collectAsState()
@@ -71,6 +89,31 @@ fun LibraryScreen(
     val selectedSort by viewModel.selectedSort.collectAsState()
     val filterType by viewModel.filterType.collectAsState()
     val favoritesOnly by viewModel.favoritesOnly.collectAsState()
+    val snackbarMessage by viewModel.snackbarMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var fabExpanded by remember { mutableStateOf(false) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let { viewModel.importDocument(it) }
+    }
+
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSnackbarMessage()
+        }
+    }
+
+    LaunchedEffect(pendingImportUri) {
+        pendingImportUri?.let { uri ->
+            viewModel.importDocument(uri)
+            onPendingImportConsumed()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -100,24 +143,52 @@ fun LibraryScreen(
                 ),
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            LargeFloatingActionButton(
-                onClick = onNewNoteClick,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+            Box {
+                LargeFloatingActionButton(
+                    onClick = { fabExpanded = true },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "Add document",
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add",
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "New",
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = fabExpanded,
+                    onDismissRequest = { fabExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Import document") },
+                        onClick = {
+                            fabExpanded = false
+                            importLauncher.launch(IMPORT_MIME_TYPES)
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                        },
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "New Note",
-                        fontWeight = FontWeight.Medium,
+                    DropdownMenuItem(
+                        text = { Text("New note") },
+                        onClick = {
+                            fabExpanded = false
+                            onNewNoteClick()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.AutoMirrored.Outlined.Notes, contentDescription = null)
+                        },
                     )
                 }
             }

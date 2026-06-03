@@ -1,5 +1,7 @@
 package com.docwallet.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,13 +42,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onExportBackup: () -> Unit,
-    onImportBackup: () -> Unit,
+    onCollectionsClick: () -> Unit = {},
+    onTagsClick: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val currentPassword by viewModel.currentPassword.collectAsState()
@@ -55,6 +60,18 @@ fun SettingsScreen(
     val message by viewModel.message.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        uri?.let { viewModel.exportBackup(it) }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let { viewModel.importBackup(it) }
+    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -228,7 +245,10 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     OutlinedButton(
-                        onClick = onExportBackup,
+                        onClick = {
+                            val dateStr = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                            exportLauncher.launch("DocWallet-$dateStr.docwallet-backup")
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Export Backup")
@@ -237,10 +257,41 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedButton(
-                        onClick = onImportBackup,
+                        onClick = {
+                            importLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Import Backup")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SectionHeader("Management")
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                ),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedButton(
+                        onClick = onCollectionsClick,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Collections")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = onTagsClick,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Tags")
                     }
                 }
             }

@@ -1,11 +1,13 @@
 package com.docwallet.ui.library
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.model.Document
 import com.docwallet.data.model.DocumentType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SortOption(val label: String) {
     NAME_ASC("Name A-Z"),
@@ -103,5 +106,33 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     fun search(query: String) {
         searchQuery.value = query
+    }
+
+    private val _snackbarMessage = MutableStateFlow<String?>(null)
+    val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
+
+    fun importDocument(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val app = getApplication<DocWalletApplication>()
+                val mimeType = withContext(Dispatchers.IO) {
+                    app.contentResolver.getType(uri) ?: "application/octet-stream"
+                }
+                val doc = withContext(Dispatchers.IO) {
+                    app.documentImporter.importDocument(uri, mimeType)
+                }
+                _snackbarMessage.value = if (doc != null) {
+                    "Imported ${doc.title}"
+                } else {
+                    "Import failed"
+                }
+            } catch (e: Exception) {
+                _snackbarMessage.value = "Import failed: ${e.message}"
+            }
+        }
+    }
+
+    fun clearSnackbarMessage() {
+        _snackbarMessage.value = null
     }
 }

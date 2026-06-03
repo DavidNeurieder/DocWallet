@@ -1,16 +1,21 @@
 package com.docwallet.ui.settings
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.encryption.EncryptionManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    private val encryptionManager: EncryptionManager =
-        (application as DocWalletApplication).encryptionManager
+    private val app = application as DocWalletApplication
+    private val encryptionManager: EncryptionManager = app.encryptionManager
 
     val isPasswordSet: Boolean
         get() = encryptionManager.isPasswordSet()
@@ -80,6 +85,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun clearMessage() {
         _message.value = null
+    }
+
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                app.backupManager.exportBackupToUri(uri)
+            }
+            _message.value = if (success) "Backup exported successfully" else "Backup export failed"
+        }
+    }
+
+    fun importBackup(uri: Uri) {
+        viewModelScope.launch {
+            val password = currentPassword.value.takeIf { it.isNotBlank() }
+            val success = withContext(Dispatchers.IO) {
+                app.backupManager.importBackupFromUri(uri, password)
+            }
+            _message.value = if (success) "Backup imported successfully" else "Backup import failed"
+        }
     }
 
     private fun clearFields() {

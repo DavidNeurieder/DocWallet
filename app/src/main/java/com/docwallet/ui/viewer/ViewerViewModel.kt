@@ -37,10 +37,41 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             _isLoading.value = true
             _error.value = null
             try {
-                val doc = withContext(Dispatchers.IO) {
+                var doc = withContext(Dispatchers.IO) {
                     app.documentDao.getDocumentById(documentId)
                 }
                 if (doc == null) {
+                    val uuidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+                    if (uuidRegex.matches(documentId)) {
+                        doc = withContext(Dispatchers.IO) {
+                            val filesDir = File(app.filesDir, "files").also { it.mkdirs() }
+                            val encryptedFile = File(filesDir, "${java.util.UUID.randomUUID()}.enc")
+                            val tempFile = File(app.cacheDir, "new_note_$documentId.md")
+                            tempFile.writeText("")
+                            val masterKey = app.encryptionManager.getMasterKeyForSession()
+                                ?: throw IllegalStateException("No master key available")
+                            val iv = app.fileEncryptor.encrypt(tempFile, encryptedFile, masterKey)
+                            tempFile.delete()
+                            val document = Document(
+                                id = documentId,
+                                title = "New Note",
+                                fileName = "${documentId}.md",
+                                mimeType = "text/markdown",
+                                filePath = encryptedFile.absolutePath,
+                                importedAt = System.currentTimeMillis(),
+                                encryptionIv = iv,
+                                textContent = "",
+                            )
+                            app.documentDao.insert(document)
+                            document
+                        }
+                        val emptyFile = File(app.cacheDir, "viewer_${doc.id}_${doc.fileName}")
+                        emptyFile.writeText("")
+                        _decryptedFile.value = emptyFile
+                        _document.value = doc
+                        _isLoading.value = false
+                        return@launch
+                    }
                     _error.value = "Document not found"
                     _isLoading.value = false
                     return@launch

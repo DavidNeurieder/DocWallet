@@ -1,6 +1,7 @@
 package com.docwallet.domain
 
 import android.content.Context
+import android.net.Uri
 import com.docwallet.data.encryption.EncryptionManager
 import com.docwallet.data.encryption.FileEncryptor
 import kotlinx.coroutines.Dispatchers
@@ -9,7 +10,6 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.FileNotFoundException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -164,6 +164,35 @@ class BackupManager(
             } else {
                 file.copyTo(dest, overwrite = true)
             }
+        }
+    }
+
+    suspend fun exportBackupToUri(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val tempFile = File(context.cacheDir, "backup_export_${System.currentTimeMillis()}.backup")
+            val success = exportBackup(tempFile)
+            if (!success) return@withContext false
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                tempFile.inputStream().use { it.copyTo(outputStream) }
+            } ?: return@withContext false
+            tempFile.delete()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun importBackupFromUri(uri: Uri, currentPassword: String? = null): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val tempFile = File(context.cacheDir, "backup_import_${System.currentTimeMillis()}.backup")
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                tempFile.outputStream().use { it.write(inputStream.readBytes()) }
+            } ?: return@withContext false
+            val success = importBackup(tempFile, currentPassword)
+            tempFile.delete()
+            success
+        } catch (e: Exception) {
+            false
         }
     }
 }
