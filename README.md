@@ -52,4 +52,4 @@ sdk.dir=/path/to/Android/Sdk
 
 ## License
 
-GPL-3.0-only. See [COPYING](COPYING) for details.
+GPL-3.0-only. See [LICENSE](LICENSE) for details.
