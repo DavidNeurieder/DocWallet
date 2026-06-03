@@ -1,19 +1,22 @@
 package com.docwallet.ui.unlock
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.docwallet.DocWalletApplication
 
 class UnlockViewModel(application: Application) : AndroidViewModel(application) {
     private val encryptionManager = (application as DocWalletApplication).encryptionManager
 
-    var password: String = ""
+    var password: String by mutableStateOf("")
         private set
 
-    var error: String? = null
+    var error: String? by mutableStateOf(null)
         private set
 
-    var isLoading: Boolean = false
+    var isLoading: Boolean by mutableStateOf(false)
         private set
 
     val isPasswordSet: Boolean

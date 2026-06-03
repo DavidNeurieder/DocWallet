@@ -102,6 +102,8 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.arch.core.testing)
     testImplementation(libs.robolectric)
+    testImplementation("androidx.compose.ui:ui-test-android:1.6.0")
+    testImplementation("androidx.compose.ui:ui-test-junit4-android:1.6.0")
 
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.compose.ui.test.manifest)
