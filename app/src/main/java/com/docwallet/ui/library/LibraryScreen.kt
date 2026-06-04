@@ -79,7 +79,7 @@ fun LibraryScreen(
     onSettingsClick: () -> Unit,
     onSearchClick: () -> Unit = {},
     onNewNoteClick: () -> Unit = {},
-    pendingImportUri: Uri? = null,
+    pendingImportUris: List<Uri> = emptyList(),
     onPendingImportConsumed: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(),
 ) {
@@ -96,9 +96,11 @@ fun LibraryScreen(
     var fabExpanded by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        uri?.let { viewModel.importDocument(it) }
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importDocuments(uris)
+        }
     }
 
     LaunchedEffect(snackbarMessage) {
@@ -108,9 +110,9 @@ fun LibraryScreen(
         }
     }
 
-    LaunchedEffect(pendingImportUri) {
-        pendingImportUri?.let { uri ->
-            viewModel.importDocument(uri)
+    LaunchedEffect(pendingImportUris) {
+        if (pendingImportUris.isNotEmpty()) {
+            viewModel.importDocuments(pendingImportUris)
             onPendingImportConsumed()
         }
     }

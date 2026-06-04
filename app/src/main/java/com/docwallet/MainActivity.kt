@@ -23,7 +23,7 @@ import com.docwallet.ui.navigation.DocWalletNavGraph
 import com.docwallet.ui.navigation.Routes
 
 class MainActivity : ComponentActivity() {
-    private var pendingShareUri by mutableStateOf<Uri?>(null)
+    private val pendingShareUris = mutableStateOf<List<Uri>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,8 +61,8 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             startDestination = startDestination,
                             onUnlocked = { /* handled in NavGraph */ },
-                            pendingImportUri = pendingShareUri,
-                            onPendingImportConsumed = { pendingShareUri = null },
+                            pendingImportUris = pendingShareUris.value,
+                            onPendingImportConsumed = { pendingShareUris.value = emptyList() },
                         )
                     }
                 }
@@ -81,14 +81,13 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_SEND -> {
                 val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
                 if (uri != null) {
-                    pendingShareUri = uri
+                    pendingShareUris.value = listOf(uri)
                 }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
                 val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-                val first = uris?.firstOrNull()
-                if (first != null) {
-                    pendingShareUri = first
+                if (uris != null) {
+                    pendingShareUris.value = uris.filterNotNull()
                 }
             }
         }

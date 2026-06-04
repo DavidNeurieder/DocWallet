@@ -111,23 +111,28 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
-    fun importDocument(uri: Uri) {
+    fun importDocuments(uris: List<Uri>) {
         viewModelScope.launch {
-            try {
-                val app = getApplication<DocWalletApplication>()
-                val mimeType = withContext(Dispatchers.IO) {
-                    app.contentResolver.getType(uri) ?: "application/octet-stream"
+            val app = getApplication<DocWalletApplication>()
+            var successCount = 0
+            var failCount = 0
+            for (uri in uris) {
+                try {
+                    val mimeType = withContext(Dispatchers.IO) {
+                        app.contentResolver.getType(uri) ?: "application/octet-stream"
+                    }
+                    val doc = withContext(Dispatchers.IO) {
+                        app.documentImporter.importDocument(uri, mimeType)
+                    }
+                    if (doc != null) successCount++ else failCount++
+                } catch (e: Exception) {
+                    failCount++
                 }
-                val doc = withContext(Dispatchers.IO) {
-                    app.documentImporter.importDocument(uri, mimeType)
-                }
-                _snackbarMessage.value = if (doc != null) {
-                    "Imported ${doc.title}"
-                } else {
-                    "Import failed"
-                }
-            } catch (e: Exception) {
-                _snackbarMessage.value = "Import failed: ${e.message}"
+            }
+            _snackbarMessage.value = when {
+                failCount == 0 -> "Imported $successCount document${if (successCount != 1) "s" else ""}"
+                successCount == 0 -> "Import failed"
+                else -> "Imported $successCount document${if (successCount != 1) "s" else ""}, $failCount failed"
             }
         }
     }

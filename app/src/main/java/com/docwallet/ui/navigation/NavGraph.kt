@@ -32,7 +32,7 @@ fun DocWalletNavGraph(
     navController: NavHostController,
     startDestination: String,
     onUnlocked: () -> Unit,
-    pendingImportUri: Uri? = null,
+    pendingImportUris: List<Uri> = emptyList(),
     onPendingImportConsumed: () -> Unit = {},
 ) {
     NavHost(
@@ -67,7 +67,7 @@ fun DocWalletNavGraph(
                     val newId = java.util.UUID.randomUUID().toString()
                     navController.navigate(Routes.viewer(newId))
                 },
-                pendingImportUri = pendingImportUri,
+                pendingImportUris = pendingImportUris,
                 onPendingImportConsumed = onPendingImportConsumed,
             )
         }
