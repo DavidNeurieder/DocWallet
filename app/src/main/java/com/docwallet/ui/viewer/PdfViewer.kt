@@ -3,6 +3,7 @@ package com.docwallet.ui.viewer
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,21 +29,28 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import com.docwallet.data.model.Document
-import com.tom_roush.pdfbox.pdmodel.PDDocument
-import com.tom_roush.pdfbox.rendering.PDFRenderer
+import com.artifex.mupdf.fitz.ColorSpace
+import com.artifex.mupdf.fitz.Document
+import com.artifex.mupdf.fitz.Matrix
+import com.docwallet.data.model.Document as DocWalletDocument
 import java.io.File
+import java.nio.ByteBuffer
 
 @Composable
 fun PdfViewer(
     file: File,
-    document: Document,
+    document: DocWalletDocument,
 ) {
     val pageCount = remember(document.pageCount) {
         if (document.pageCount > 0) document.pageCount
         else try {
-            PDDocument.load(file).use { doc -> doc.numberOfPages }
-        }         catch (e: Exception) {
+            val doc = Document.openDocument(file.absolutePath)
+            try {
+                doc.countPages()
+            } finally {
+                doc.destroy()
+            }
+        } catch (e: Exception) {
             Log.w("PdfViewer", "Failed to load page count", e)
             0
         }
@@ -59,10 +67,32 @@ fun PdfViewer(
         for (i in start..end) {
             if (i !in renderedPages) {
                 try {
-                    PDDocument.load(file).use { doc ->
-                        val renderer = PDFRenderer(doc)
-                        val bitmap = renderer.renderImageWithDPI(i, 150f)
-                        renderedPages[i] = bitmap
+                    val doc = Document.openDocument(file.absolutePath)
+                    try {
+                        val page = doc.loadPage(i)
+                        try {
+                            val scale = 150f / 72f
+                            val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
+                            val pixmap = page.toPixmap(
+                                matrix, ColorSpace.DeviceRGB, true
+                            )
+                            try {
+                                val bitmap = Bitmap.createBitmap(
+                                    pixmap.width, pixmap.height,
+                                    Bitmap.Config.ARGB_8888
+                                )
+                                bitmap.copyPixelsFromBuffer(
+                                    ByteBuffer.wrap(pixmap.samples)
+                                )
+                                renderedPages[i] = bitmap
+                            } finally {
+                                pixmap.destroy()
+                            }
+                        } finally {
+                            page.destroy()
+                        }
+                    } finally {
+                        doc.destroy()
                     }
                 } catch (e: Exception) {
                     Log.e("PdfViewer", "Failed to render page $i", e)
@@ -105,7 +135,8 @@ fun PdfViewer(
                         contentDescription = "Page ${index + 1}",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 4.dp)
+                            .background(androidx.compose.ui.graphics.Color.White),
                         contentScale = ContentScale.FillWidth,
                     )
                 } else {

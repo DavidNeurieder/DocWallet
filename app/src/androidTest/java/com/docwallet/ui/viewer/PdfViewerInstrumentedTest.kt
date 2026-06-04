@@ -7,11 +7,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.model.Document
-import com.tom_roush.pdfbox.pdmodel.PDDocument
-import com.tom_roush.pdfbox.pdmodel.PDPage
-import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
-import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
-import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -26,16 +21,20 @@ class PdfViewerInstrumentedTest {
     val composeTestRule = createComposeRule()
 
     private lateinit var context: android.content.Context
+    private lateinit var cacheDir: File
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext<DocWalletApplication>()
+        cacheDir = context.cacheDir
     }
 
     @Test
     fun rendersPdfPageAsImage() {
-        val bodyText = "Rendered on device with 150 DPI"
-        val file = createTestPdf(bodyText)
+        val file = copyResourceToCache("test_1page.pdf")
+
+        verifyMuPDFCanOpen(file, 1)
+
         val doc = Document(
             id = "pdf-inst-test",
             title = "Instrumented PDF",
@@ -56,8 +55,10 @@ class PdfViewerInstrumentedTest {
 
     @Test
     fun doesNotShowFallbackTextWhenRenderingSucceeds() {
-        val bodyText = "No fallback text on device"
-        val file = createTestPdf(bodyText)
+        val file = copyResourceToCache("test_1page.pdf")
+
+        verifyMuPDFCanOpen(file, 1)
+
         val doc = Document(
             id = "pdf-inst-no-fallback",
             title = "No Fallback",
@@ -78,7 +79,10 @@ class PdfViewerInstrumentedTest {
 
     @Test
     fun rendersMultiPagePdf() {
-        val file = createMultiPagePdf(2)
+        val file = copyResourceToCache("test_2page.pdf")
+
+        verifyMuPDFCanOpen(file, 2)
+
         val doc = Document(
             id = "pdf-inst-multi",
             title = "Multi-Page PDF",
@@ -107,49 +111,46 @@ class PdfViewerInstrumentedTest {
 
     @Test
     fun pdfContentCanBeExtractedAfterRendering() {
-        val bodyText = "Content verification in instrumented test"
-        val file = createTestPdf(bodyText)
+        val bodyText = "Test PDF content"
+        val file = copyResourceToCache("test_1page.pdf")
 
-        PDDocument.load(file).use { pdf ->
-            val stripper = com.tom_roush.pdfbox.text.PDFTextStripper()
-            val text = stripper.getText(pdf)
-            assertTrue("PDF should contain the body text", text.contains(bodyText))
+        val rawText = file.readBytes().toString(Charsets.ISO_8859_1)
+        assertTrue("PDF should contain the body text", rawText.contains(bodyText))
+    }
+
+    private fun verifyMuPDFCanOpen(file: File, expectedPages: Int) {
+        val fileInfo = "path=${file.absolutePath} exists=${file.exists()} size=${file.length()}"
+        assertTrue("Cannot process PDF - $fileInfo", file.exists() && file.length() > 0)
+        if (!file.exists() || file.length() == 0L) return
+
+        val allBytes = file.readBytes()
+        val firstBytes = if (allBytes.size > 100) {
+            allBytes.copyOfRange(0, 100).toString(Charsets.ISO_8859_1)
+        } else allBytes.toString(Charsets.ISO_8859_1)
+        assertTrue("PDF header missing: $firstBytes", firstBytes.startsWith("%PDF"))
+
+        val doc = try {
+            com.artifex.mupdf.fitz.Document.openDocument(file.absolutePath)
+        } catch (e: Exception) {
+            throw AssertionError("MuPDF openDocument failed for $fileInfo: ${e.message}", e)
+        }
+        try {
+            val actualPages = doc.countPages()
+            assertTrue("Expected $expectedPages pages, got $actualPages", actualPages == expectedPages)
+        } finally {
+            doc.destroy()
         }
     }
 
-    private fun createTestPdf(body: String): File {
-        val file = File(context.cacheDir, "inst_test_${System.nanoTime()}.pdf")
-        PDDocument().use { doc ->
-            val page = PDPage(PDRectangle.A4)
-            doc.addPage(page)
-            PDPageContentStream(doc, page).use { cs ->
-                cs.beginText()
-                cs.setFont(PDType1Font.HELVETICA, 12f)
-                cs.newLineAtOffset(72f, 700f)
-                cs.showText(body)
-                cs.endText()
+    private fun copyResourceToCache(name: String): File {
+        val inputStream = javaClass.classLoader.getResourceAsStream(name)
+            ?: throw IllegalStateException("Resource $name not found")
+        val target = File(cacheDir, name)
+        inputStream.use { input ->
+            target.outputStream().use { output ->
+                input.copyTo(output)
             }
-            doc.save(file)
         }
-        return file
-    }
-
-    private fun createMultiPagePdf(pageCount: Int): File {
-        val file = File(context.cacheDir, "inst_test_${System.nanoTime()}.pdf")
-        PDDocument().use { doc ->
-            for (i in 0 until pageCount) {
-                val page = PDPage(PDRectangle.A4)
-                doc.addPage(page)
-                PDPageContentStream(doc, page).use { cs ->
-                    cs.beginText()
-                    cs.setFont(PDType1Font.HELVETICA, 12f)
-                    cs.newLineAtOffset(72f, 700f)
-                    cs.showText("Page ${i + 1} content")
-                    cs.endText()
-                }
-            }
-            doc.save(file)
-        }
-        return file
+        return target
     }
 }

@@ -1,9 +1,9 @@
 package com.docwallet.data.import
 
 import android.graphics.Bitmap
-import com.tom_roush.pdfbox.pdmodel.PDDocument
-import com.tom_roush.pdfbox.rendering.PDFRenderer
-import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.artifex.mupdf.fitz.ColorSpace
+import com.artifex.mupdf.fitz.Document
+import com.artifex.mupdf.fitz.Matrix
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -11,19 +11,51 @@ import java.io.File
 class PdfProcessor : DocumentProcessor {
 
     override suspend fun process(input: File, mimeType: String): ProcessorResult = withContext(Dispatchers.IO) {
-        PDDocument.load(input).use { doc ->
-            val info = doc.documentInformation
-            val title = info.title?.takeIf { it.isNotBlank() } ?: input.nameWithoutExtension
-            val author = info.author ?: ""
-            val pageCount = doc.numberOfPages
+        val doc = Document.openDocument(input.absolutePath)
+        try {
+            val title = doc.getMetaData(Document.META_INFO_TITLE)
+                ?.takeIf { it.isNotBlank() } ?: input.nameWithoutExtension
+            val author = doc.getMetaData(Document.META_INFO_AUTHOR) ?: ""
+            val pageCount = doc.countPages()
 
-            val textStripper = PDFTextStripper()
-            val textContent = textStripper.getText(doc)
+            val textContent = buildString {
+                for (i in 0 until pageCount) {
+                    val page = doc.loadPage(i)
+                    try {
+                        val stext = page.toStructuredText()
+                        try {
+                            append(stext.asText())
+                            append("\n")
+                        } finally {
+                            stext.destroy()
+                        }
+                    } finally {
+                        page.destroy()
+                    }
+                }
+            }
 
             val thumbnailBitmap = if (pageCount > 0) {
-                val renderer = PDFRenderer(doc)
-                val pageBitmap = renderer.renderImage(0)
-                scaleToWidth(pageBitmap, 200)
+                val page = doc.loadPage(0)
+                try {
+                    val bounds = page.bounds
+                    val pageWidth = bounds.x1 - bounds.x0
+                    val scale = 200f / pageWidth
+                    val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
+                    val pixmap = page.toPixmap(matrix, ColorSpace.DeviceRGB, true)
+                    try {
+                        val bitmap = Bitmap.createBitmap(
+                            pixmap.width, pixmap.height,
+                            Bitmap.Config.ARGB_8888
+                        )
+                        bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(pixmap.samples))
+                        bitmap
+                    } finally {
+                        pixmap.destroy()
+                    }
+                } finally {
+                    page.destroy()
+                }
             } else null
 
             ProcessorResult(
@@ -33,11 +65,8 @@ class PdfProcessor : DocumentProcessor {
                 textContent = textContent,
                 thumbnailBitmap = thumbnailBitmap,
             )
+        } finally {
+            doc.destroy()
         }
-    }
-
-    private fun scaleToWidth(source: Bitmap, targetWidth: Int): Bitmap {
-        val targetHeight = (targetWidth * source.height) / source.width
-        return Bitmap.createScaledBitmap(source, targetWidth, targetHeight.coerceAtLeast(1), true)
     }
 }

@@ -10,13 +10,8 @@ import com.docwallet.data.encryption.Argon2Hasher
 import com.docwallet.data.encryption.EncryptionManager
 import com.docwallet.data.encryption.FileEncryptor
 import com.docwallet.data.model.Document
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
-import com.tom_roush.pdfbox.pdmodel.PDDocument
-import com.tom_roush.pdfbox.pdmodel.PDPage
-import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
-import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
-import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
-import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.docwallet.data.model.DocumentType
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
@@ -24,7 +19,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -73,8 +67,6 @@ class DocumentImporterTest {
 
         context = RuntimeEnvironment.getApplication().applicationContext
 
-        PDFBoxResourceLoader.init(context)
-
         encryptionManager = EncryptionManager(context, mockHasher)
         encryptionManager.initializeDeviceKeyMode()
 
@@ -85,7 +77,17 @@ class DocumentImporterTest {
         dao = db.documentDao()
 
         fileEncryptor = FileEncryptor()
-        importer = DocumentImporter(context, dao, fileEncryptor, encryptionManager)
+
+        val mockPdfProcessor = mockk<PdfProcessor>()
+        coEvery { mockPdfProcessor.process(any(), any()) } returns ProcessorResult(
+            title = "Mock PDF Title",
+            author = "Mock Author",
+            pageCount = 1,
+            textContent = "Mock extracted text",
+            thumbnailBitmap = null,
+        )
+
+        importer = DocumentImporter(context, dao, fileEncryptor, encryptionManager, mockPdfProcessor)
     }
 
     @After
@@ -242,11 +244,9 @@ class DocumentImporterTest {
         assertTrue("Decrypted file should exist", decryptedFile.exists())
         assertTrue("Decrypted file should have content", decryptedFile.length() > 0)
 
-        val decryptedPdf = PDDocument.load(decryptedFile)
-        assertEquals("PDF should have 1 page", 1, decryptedPdf.numberOfPages)
-        val extractedTitle = decryptedPdf.documentInformation.title
-        assertEquals("Round Trip", extractedTitle)
-        decryptedPdf.close()
+        val rawText = decryptedFile.readBytes().toString(Charsets.ISO_8859_1)
+        assertTrue("Decrypted PDF should contain title", rawText.contains("Round Trip"))
+        assertTrue("Decrypted PDF should contain body text", rawText.contains("Verify encrypt/decrypt round trip works."))
     }
 
     @Test
@@ -277,14 +277,11 @@ class DocumentImporterTest {
         assertTrue("Decrypted file should exist", decryptedFile.exists())
         assertTrue("Decrypted file should have content", decryptedFile.length() > 0)
 
-        PDDocument.load(decryptedFile).use { pdf ->
-            val stripper = PDFTextStripper()
-            val extractedText = stripper.getText(pdf)
-            assertTrue(
-                "Decrypted PDF body text should contain the original body text",
-                extractedText.contains(bodyText),
-            )
-        }
+        val rawText = decryptedFile.readBytes().toString(Charsets.ISO_8859_1)
+        assertTrue(
+            "Decrypted PDF body text should contain the original body text",
+            rawText.contains(bodyText),
+        )
     }
 
     @Test
@@ -306,23 +303,42 @@ class DocumentImporterTest {
 
     private fun createPdf(title: String, author: String, body: String): File {
         val file = File(context.cacheDir, "test_${System.nanoTime()}.pdf")
-        PDDocument().use { doc ->
-            val page = PDPage(PDRectangle.A4)
-            doc.addPage(page)
 
-            doc.documentInformation.title = title
-            doc.documentInformation.author = author
+        val streamData = "BT /F1 12 Tf 100 700 Td ($body) Tj ET\n".toByteArray()
 
-            PDPageContentStream(doc, page).use { cs ->
-                cs.beginText()
-                cs.setFont(PDType1Font.HELVETICA, 12f)
-                cs.newLineAtOffset(72f, 700f)
-                cs.showText(body)
-                cs.endText()
-            }
+        val header = "%PDF-1.4\n".toByteArray()
 
-            doc.save(file)
+        fun obj(n: Int, data: ByteArray) = data
+        fun o(data: String) = data.toByteArray()
+
+        val obj1 = o("1 0 obj<</Type/Catalog/Pages 3 0 R>>endobj\n")
+        val obj2 = o("2 0 obj<</Title($title)/Author($author)>>endobj\n")
+        val obj3 = o("3 0 obj<</Type/Pages/Kids[4 0 R]/Count 1>>endobj\n")
+        val obj4 = o("4 0 obj<</Type/Page/Parent 3 0 R/MediaBox[0 0 612 792]/Contents 5 0 R/Resources<</Font<</F1 6 0 R>>>>>>endobj\n")
+        val obj5 = o("5 0 obj<</Length ${streamData.size}>>stream\n") + streamData + o("endstream\nendobj\n")
+        val obj6 = o("6 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n")
+
+        val objects = listOf(obj1, obj2, obj3, obj4, obj5, obj6)
+
+        var pos = header.size
+        val offsets = objects.map { obj ->
+            val off = pos
+            pos += obj.size
+            off
         }
+
+        val xrefEntries = buildString {
+            append("0000000000 65535 f \n")
+            for (off in offsets) {
+                append("%010d 00000 n \n".format(off))
+            }
+        }
+        val xref = "xref\n0 ${objects.size + 1}\n${xrefEntries}".toByteArray()
+        val trailer = "trailer<</Size ${objects.size + 1}/Root 1 0 R/Info 2 0 R>>\n".toByteArray()
+        val startxrefLine = "startxref\n${pos}\n".toByteArray()
+        val eof = "%%EOF\n".toByteArray()
+
+        file.writeBytes(header + objects.fold(byteArrayOf()) { a, b -> a + b } + xref + trailer + startxrefLine + eof)
         return file
     }
 

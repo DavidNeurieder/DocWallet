@@ -9,7 +9,7 @@ import com.docwallet.data.encryption.EncryptionManager
 import com.docwallet.data.encryption.FileEncryptor
 import com.docwallet.data.import.DocumentImporter
 import com.docwallet.domain.BackupManager
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+
 
 class DocWalletApplication : Application() {
     lateinit var encryptionManager: EncryptionManager
@@ -38,6 +38,5 @@ class DocWalletApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         encryptionManager = EncryptionManager(this)
-        PDFBoxResourceLoader.init(this)
     }
 }

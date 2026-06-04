@@ -22,6 +22,7 @@ class DocumentImporter(
     private val documentDao: DocumentDao,
     private val fileEncryptor: FileEncryptor,
     private val encryptionManager: EncryptionManager,
+    private val pdfProcessor: PdfProcessor = PdfProcessor(),
 ) {
     companion object {
         private const val TAG = "DocumentImporter"
@@ -110,7 +111,7 @@ class DocumentImporter(
 
     private fun getProcessor(documentType: DocumentType): DocumentProcessor? {
         return when (documentType) {
-            DocumentType.PDF -> PdfProcessor()
+            DocumentType.PDF -> pdfProcessor
             DocumentType.EPUB -> EpubProcessor()
             DocumentType.PKPASS -> PkPassProcessor()
             DocumentType.CBZ, DocumentType.CBR -> ComicProcessor()

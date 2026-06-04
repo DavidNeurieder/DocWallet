@@ -96,7 +96,7 @@ dependencies {
     implementation(libs.commonmark)
     implementation(libs.zxing.core)
     implementation(libs.commons.compress)
-    implementation(libs.pdfbox.android)
+    implementation(libs.mupdf.fitz)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.work.runtime)
     implementation(libs.preference.ktx)

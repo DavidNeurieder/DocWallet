@@ -9,10 +9,6 @@
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
 
-# PdfBox-Android
--keep class com.tom_roush.pdfbox.** { *; }
--dontwarn com.tom_roush.pdfbox.**
-
 # ZXing
 -keep class com.google.zxing.** { *; }
 -dontwarn com.google.zxing.**
