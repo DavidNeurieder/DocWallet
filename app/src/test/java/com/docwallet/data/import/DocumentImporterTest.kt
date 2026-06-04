@@ -109,7 +109,7 @@ class DocumentImporterTest {
         assertEquals("application/pdf", doc.mimeType)
         assertTrue("File should be encrypted (.enc)", doc.filePath.endsWith(".enc"))
         assertNotNull("Encryption IV must be present", doc.encryptionIv)
-        assertEquals(32, doc.encryptionIv!!.size)
+        assertEquals(12, doc.encryptionIv!!.size)
         assertTrue("File should exist on disk", File(doc.filePath).exists())
         assertTrue("File size should be > 0", doc.fileSize > 0)
 
