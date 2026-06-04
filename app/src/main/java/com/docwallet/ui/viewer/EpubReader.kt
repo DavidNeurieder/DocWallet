@@ -1,6 +1,7 @@
 package com.docwallet.ui.viewer
 
 import android.annotation.SuppressLint
+import android.util.Base64
 import android.util.Log
 import android.webkit.WebView
 import androidx.compose.foundation.layout.Box
@@ -52,19 +53,7 @@ fun EpubReader(file: File) {
             },
             update = { webView ->
                 htmlContent?.let {
-                    val styledHtml = """
-                        <html>
-                        <head>
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <style>
-                            body { font-family: sans-serif; padding: 16px; line-height: 1.6; color: #1a1a1a; }
-                            img { max-width: 100%%; height: auto; }
-                        </style>
-                        </head>
-                        <body>$it</body>
-                        </html>
-                    """.trimIndent()
-                    webView.loadDataWithBaseURL(null, styledHtml, "text/html", "UTF-8", null)
+                    webView.loadDataWithBaseURL(null, it, "text/html", "UTF-8", null)
                 }
             },
             modifier = Modifier
@@ -192,15 +181,53 @@ internal fun loadSpineContent(epubFile: File, spineItems: List<SpineItem>, index
     if (index < 0 || index >= spineItems.size) return null
     try {
         ZipFile(epubFile).use { zip ->
-            val entry = zip.getEntry(spineItems[index].href) ?: return null
+            val spine = spineItems[index]
+            val entry = zip.getEntry(spine.href) ?: return null
             val html = zip.getInputStream(entry).readBytes().decodeToString()
-            val body = extractBody(html)
-            return body ?: html
+            val baseDir = spine.href.substringBeforeLast("/", "")
+
+            val epubCss = extractExternalCss(html, zip, baseDir)
+            val body = extractBody(html) ?: html
+            val processedBody = inlineImages(body, zip, baseDir)
+
+            return buildEpubHtml(processedBody, epubCss)
         }
     } catch (e: Exception) {
         Log.e("EpubReader", "loadSpineContent error for index=$index href=${spineItems.getOrNull(index)?.href}", e)
         return null
     }
+}
+
+internal fun extractExternalCss(html: String, zip: ZipFile, baseDir: String): List<String> {
+    val linkRegex = Regex("""<link[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*/?>""", RegexOption.IGNORE_CASE)
+    return linkRegex.findAll(html).mapNotNull { match ->
+        val href = match.groupValues[1]
+        val resolvedPath = resolvePath(baseDir, href)
+        val cssEntry = zip.getEntry(resolvedPath)
+        if (cssEntry != null) {
+            zip.getInputStream(cssEntry).readBytes().decodeToString()
+        } else null
+    }.toList()
+}
+
+internal fun buildEpubHtml(bodyContent: String, epubCss: List<String>): String {
+    val readerCss = buildReaderCss()
+    val epubCssBlock = if (epubCss.isNotEmpty()) {
+        epubCss.joinToString("\n\n", prefix = "\n", postfix = "\n")
+    } else ""
+
+    return """
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+$readerCss
+$epubCssBlock
+</style>
+</head>
+<body>$bodyContent</body>
+</html>
+""".trimIndent()
 }
 
 internal fun extractBody(html: String): String? {
@@ -212,4 +239,88 @@ internal fun extractBody(html: String): String? {
     val bodyEnd = html.indexOf("</body>", ignoreCase = true, startIndex = contentStart)
     if (bodyEnd == -1) return null
     return html.substring(contentStart, bodyEnd)
+}
+
+internal fun buildReaderCss(): String = """
+    :root {
+        color-scheme: light dark;
+    }
+    body {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 1em;
+        line-height: 1.8;
+        padding: 16px;
+        margin: 0;
+        color: #1a1a1a;
+        background-color: #ffffff;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    @media (prefers-color-scheme: dark) {
+        body {
+            color: #e0e0e0;
+            background-color: #121212;
+        }
+        a { color: #81b4ff; }
+    }
+    img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 1em auto;
+    }
+    p {
+        margin: 0 0 1em 0;
+    }
+    h1, h2, h3, h4, h5, h6 {
+        line-height: 1.3;
+        margin: 1.5em 0 0.5em 0;
+    }
+""".trimIndent()
+
+internal fun inlineImages(html: String, zip: ZipFile, baseDir: String): String {
+    val imgRegex = Regex("""<img[^>]*src=["']([^"']+)["'][^>]*/?>""", RegexOption.IGNORE_CASE)
+    return imgRegex.replace(html) { match ->
+        val src = match.groupValues[1]
+        if (src.startsWith("data:")) return@replace match.value
+        if (src.startsWith("http://") || src.startsWith("https://")) return@replace match.value
+
+        val resolvedPath = resolvePath(baseDir, src)
+        val imgEntry = zip.getEntry(resolvedPath)
+        if (imgEntry != null) {
+            val bytes = zip.getInputStream(imgEntry).readBytes()
+            val ext = src.substringAfterLast(".").lowercase()
+            val mime = when (ext) {
+                "png" -> "image/png"
+                "jpg", "jpeg" -> "image/jpeg"
+                "gif" -> "image/gif"
+                "svg" -> "image/svg+xml"
+                "webp" -> "image/webp"
+                "bmp" -> "image/bmp"
+                else -> null
+            }
+            if (mime != null) {
+                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                match.value.replace(src, "data:$mime;base64,$b64")
+            } else {
+                match.value
+            }
+        } else {
+            match.value
+        }
+    }
+}
+
+internal fun resolvePath(baseDir: String, href: String): String {
+    if (href.startsWith("/")) return href.removePrefix("/")
+    if (baseDir.isEmpty()) return href
+    val parts = baseDir.split("/").toMutableList()
+    href.split("/").forEach { part ->
+        when (part) {
+            ".." -> if (parts.isNotEmpty()) parts.removeLast()
+            ".", "" -> {}
+            else -> parts.add(part)
+        }
+    }
+    return parts.joinToString("/")
 }

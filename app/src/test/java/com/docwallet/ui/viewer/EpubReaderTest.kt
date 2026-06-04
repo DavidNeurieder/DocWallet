@@ -141,7 +141,7 @@ class EpubReaderTest {
     }
 
     @Test
-    fun `full round trip creates EPUB with correct spine and content`() {
+    fun `full round trip creates EPUB with correct spine and enhanced content`() {
         val expectedBody = "<p>Full round-trip content</p>"
         val file = createTestEpub(
             title = "Round Trip",
@@ -154,7 +154,9 @@ class EpubReaderTest {
 
         val content = loadSpineContent(file, items, 0)
         assertNotNull("Content should not be null", content)
-        assertEquals("Body content should match", expectedBody, content)
+        assertTrue("Content should contain body text", content!!.contains("Full round-trip content"))
+        assertTrue("Content should include reader CSS", content.contains("prefers-color-scheme"))
+        assertTrue("Content should be full HTML document", content.startsWith("<?xml") || content.startsWith("<!DOCTYPE") || content.startsWith("<html"))
     }
 
     private fun createTestEpub(title: String, author: String, body: String): File {
