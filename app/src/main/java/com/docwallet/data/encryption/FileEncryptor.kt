@@ -1,8 +1,6 @@
 package com.docwallet.data.encryption
 
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -24,19 +22,9 @@ class FileEncryptor {
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         val iv = cipher.iv
 
-        FileOutputStream(output).use { out ->
-            out.write(iv)
-            FileInputStream(input).use { inputStream ->
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    val encryptedBytes = cipher.update(buffer, 0, bytesRead)
-                    if (encryptedBytes != null) out.write(encryptedBytes)
-                }
-            }
-            val finalBytes = cipher.doFinal()
-            out.write(finalBytes)
-        }
+        val data = input.readBytes()
+        val encrypted = cipher.doFinal(data)
+        output.writeBytes(iv + encrypted)
 
         return iv
     }
@@ -56,19 +44,9 @@ class FileEncryptor {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
 
-        FileOutputStream(output).use { out ->
-            FileInputStream(input).use { inputStream ->
-                inputStream.skip(iv.size.toLong())
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    val decryptedBytes = cipher.update(buffer, 0, bytesRead)
-                    if (decryptedBytes != null) out.write(decryptedBytes)
-                }
-            }
-            val finalBytes = cipher.doFinal()
-            out.write(finalBytes)
-        }
+        val data = input.readBytes()
+        val plaintext = cipher.doFinal(data, iv.size, data.size - iv.size)
+        output.writeBytes(plaintext)
     }
 
     fun decryptBytes(encrypted: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
