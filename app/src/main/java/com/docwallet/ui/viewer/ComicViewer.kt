@@ -35,8 +35,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.github.junrar.Archive
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 import java.util.zip.ZipFile
 
@@ -182,7 +184,7 @@ private fun loadComicPages(file: File): List<Bitmap> {
         val name = file.name.lowercase()
         when {
             name.endsWith(".cbz") -> loadCbzPages(file)
-            name.endsWith(".cbr") -> emptyList()
+            name.endsWith(".cbr") -> loadRarPages(file)
             else -> emptyList()
         }
     } catch (_: Exception) {
@@ -206,6 +208,31 @@ private fun loadCbzPages(file: File): List<Bitmap> {
                     }
                     if (bitmap != null) pages.add(bitmap)
                 } catch (_: Exception) {
+                }
+            }
+        }
+    } catch (_: Exception) {
+    }
+    return pages
+}
+
+private fun loadRarPages(file: File): List<Bitmap> {
+    val pages = mutableListOf<Bitmap>()
+    try {
+        FileInputStream(file).use { fis ->
+            Archive(fis).use { archive ->
+                val imageHeaders = archive.fileHeaders
+                    .filter { !it.isDirectory && isImageEntry(it.fileName) }
+                    .sortedBy { it.fileName }
+
+                for (fh in imageHeaders) {
+                    try {
+                        archive.getInputStream(fh).use { stream ->
+                            val bitmap = BitmapFactory.decodeStream(stream)
+                            if (bitmap != null) pages.add(bitmap)
+                        }
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }

@@ -1,6 +1,9 @@
 package com.docwallet
 
 import android.app.Application
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.docwallet.data.db.CollectionDao
 import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
@@ -38,5 +41,13 @@ class DocWalletApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         encryptionManager = EncryptionManager(this)
+
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) {
+                    encryptionManager.lock()
+                }
+            }
+        )
     }
 }

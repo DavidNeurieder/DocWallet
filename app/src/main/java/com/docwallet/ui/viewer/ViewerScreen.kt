@@ -1,7 +1,11 @@
 package com.docwallet.ui.viewer
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -9,17 +13,24 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,6 +59,41 @@ fun ViewerScreen(
     val error by viewModel.error.collectAsState()
 
     var menuExpanded by remember { mutableStateOf(false) }
+    var showInfoDialog by remember { mutableStateOf(false) }
+
+    if (showInfoDialog && document != null) {
+        val doc = document!!
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+        AlertDialog(
+            onDismissRequest = { showInfoDialog = false },
+            title = { Text("Document Info") },
+            text = {
+                Column {
+                    InfoRow("Title", doc.title)
+                    InfoRow("Type", doc.mimeType)
+                    InfoRow("Size", formatFileSize(doc.fileSize))
+                    InfoRow("Pages", doc.pageCount.toString())
+                    InfoRow("Author", doc.author.ifEmpty { "—" })
+                    InfoRow("Imported", dateFormat.format(Date(doc.importedAt)))
+                    if (doc.lastOpenedAt > 0) {
+                        InfoRow("Last opened", dateFormat.format(Date(doc.lastOpenedAt)))
+                    }
+                    doc.description.ifEmpty { null }?.let {
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+                        Text("Description", style = MaterialTheme.typography.labelMedium)
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showInfoDialog = false }) {
+                    Text("Close")
+                }
+            },
+        )
+    }
 
     LaunchedEffect(documentId) {
         viewModel.loadDocument(documentId)
@@ -95,7 +141,10 @@ fun ViewerScreen(
                         ) {
                             DropdownMenuItem(
                                 text = { Text("Document info") },
-                                onClick = { menuExpanded = false },
+                                onClick = {
+                                    menuExpanded = false
+                                    showInfoDialog = true
+                                },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Info, contentDescription = null)
                                 },
@@ -178,5 +227,28 @@ fun ViewerScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        else -> "%.1f MB".format(bytes.toDouble() / (1024 * 1024))
     }
 }

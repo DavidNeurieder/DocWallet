@@ -93,6 +93,12 @@ class ViewerViewModel @JvmOverloads constructor(
                     tempFile
                 }
                 _decryptedFile.value = decrypted
+
+                withContext(ioDispatcher) {
+                    val updated = doc.copy(lastOpenedAt = System.currentTimeMillis())
+                    app.documentDao.update(updated)
+                    _document.value = updated
+                }
             } catch (e: Exception) {
                 Log.e("ViewerViewModel", "Failed to load document", e)
                 _error.value = e.message ?: "Failed to load document"
@@ -128,5 +134,15 @@ class ViewerViewModel @JvmOverloads constructor(
     fun getDocumentType(): DocumentType {
         val mime = _document.value?.mimeType ?: return DocumentType.UNKNOWN
         return DocumentType.fromMimeType(mime)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _decryptedFile.value?.let { file ->
+            try {
+                if (file.exists()) file.delete()
+            } catch (_: Exception) {
+            }
+        }
     }
 }

@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +67,7 @@ fun NoteEditor(
     var wordCount by remember { mutableIntStateOf(0) }
     var charCount by remember { mutableIntStateOf(0) }
     var saveJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(document.textContent) {
         text = document.textContent ?: ""
@@ -199,8 +201,7 @@ fun NoteEditor(
             Button(
                 onClick = {
                     saveJob?.cancel()
-                    // launch save synchronously
-                    kotlinx.coroutines.MainScope().launch {
+                    scope.launch {
                         saveNoteInternal(app, document, text)
                         onSaved()
                     }
