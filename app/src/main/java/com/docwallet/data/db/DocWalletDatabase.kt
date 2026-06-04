@@ -64,7 +64,7 @@ abstract class DocWalletDatabase : RoomDatabase() {
         }
 
         fun create(context: Context, passphrase: ByteArray): DocWalletDatabase {
-            val factory = SupportFactory(passphrase)
+            val factory = SupportFactory(passphrase.copyOf(), null, false)
             return Room.databaseBuilder(
                 context.applicationContext,
                 DocWalletDatabase::class.java,
