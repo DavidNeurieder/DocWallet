@@ -77,6 +77,7 @@ class ViewerViewModel @JvmOverloads constructor(
                         _isLoading.value = false
                         return@launch
                     }
+                    SessionStore.clearLastDocumentId(app)
                     _error.value = "Document not found"
                     _isLoading.value = false
                     return@launch
@@ -104,6 +105,7 @@ class ViewerViewModel @JvmOverloads constructor(
             } catch (e: Exception) {
                 Log.e("ViewerViewModel", "Failed to load document", e)
                 _error.value = e.message ?: "Failed to load document"
+                SessionStore.clearLastDocumentId(app)
             } finally {
                 _isLoading.value = false
             }

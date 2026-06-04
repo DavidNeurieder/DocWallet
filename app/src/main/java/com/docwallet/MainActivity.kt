@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
+import com.docwallet.data.SessionStore
 import com.docwallet.ui.navigation.DocWalletNavGraph
 import com.docwallet.ui.navigation.Routes
 
@@ -51,7 +52,8 @@ class MainActivity : ComponentActivity() {
                             startDestination = Routes.UNLOCK
                         } else {
                             app.encryptionManager.getMasterKeyForSession()
-                            startDestination = Routes.LIBRARY
+                            val lastDocId = SessionStore.getLastDocumentId(this@MainActivity)
+                            startDestination = if (lastDocId != null) Routes.viewer(lastDocId) else Routes.LIBRARY
                         }
                         isReady = true
                     }

@@ -2,7 +2,6 @@ package com.docwallet.ui.navigation
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -43,10 +42,13 @@ fun DocWalletNavGraph(
         startDestination = startDestination,
     ) {
         composable(Routes.UNLOCK) {
+            val context = LocalContext.current
             UnlockScreen(
                 onUnlocked = {
                     onUnlocked()
-                    navController.navigate(Routes.LIBRARY) {
+                    val lastDocId = SessionStore.getLastDocumentId(context)
+                    val dest = if (lastDocId != null) Routes.viewer(lastDocId) else Routes.LIBRARY
+                    navController.navigate(dest) {
                         popUpTo(Routes.UNLOCK) { inclusive = true }
                     }
                 },
@@ -62,13 +64,6 @@ fun DocWalletNavGraph(
             )
         }
         composable(Routes.LIBRARY) {
-            val context = LocalContext.current
-            LaunchedEffect(Unit) {
-                val lastDocId = SessionStore.getLastDocumentId(context)
-                if (lastDocId != null) {
-                    navController.navigate(Routes.viewer(lastDocId))
-                }
-            }
             LibraryScreen(
                 onDocumentClick = { navController.navigate(Routes.viewer(it)) },
                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
