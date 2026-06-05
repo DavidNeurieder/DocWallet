@@ -12,6 +12,7 @@ import com.docwallet.data.model.Document
 import com.docwallet.data.model.DocumentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -45,7 +46,7 @@ class DocumentImporter(
             val encryptedFile = File(filesDir, "${UUID.randomUUID()}.enc")
             val iv = fileEncryptor.encrypt(tempFile, encryptedFile, masterKey)
 
-            val thumbnailPath = result?.thumbnailBitmap?.let { saveThumbnail(it) }
+            val thumbnailPath = result?.thumbnailBitmap?.let { saveThumbnail(it, masterKey) }
 
             val document = Document(
                 id = UUID.randomUUID().toString(),
@@ -144,12 +145,15 @@ class DocumentImporter(
         return name
     }
 
-    private fun saveThumbnail(bitmap: Bitmap): String {
+    private fun saveThumbnail(bitmap: Bitmap, masterKey: ByteArray): String {
         val filesDir = File(context.filesDir, "files").also { it.mkdirs() }
-        val thumbFile = File(filesDir, "${UUID.randomUUID()}_thumb.jpg")
-        FileOutputStream(thumbFile).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        val thumbFile = File(filesDir, "${UUID.randomUUID()}_thumb")
+        val jpegBytes = ByteArrayOutputStream().use { stream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+            stream.toByteArray()
         }
+        val (iv, encrypted) = fileEncryptor.encryptBytes(jpegBytes, masterKey)
+        thumbFile.writeBytes(iv + encrypted)
         return thumbFile.absolutePath
     }
 }

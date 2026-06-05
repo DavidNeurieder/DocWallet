@@ -90,6 +90,7 @@ class ViewerViewModel @JvmOverloads constructor(
                     ?: throw IllegalStateException("No master key available for decryption")
                 val encryptedFile = File(doc.filePath)
                 val tempFile = File(app.cacheDir, "viewer_${doc.id}_${doc.fileName}")
+                if (tempFile.exists()) tempFile.delete()
                 val iv = doc.encryptionIv
                     ?: throw IllegalArgumentException("Document has no encryption IV")
                 fileEncryptor.decrypt(encryptedFile, tempFile, masterKey, iv)

@@ -94,6 +94,7 @@ fun LibraryScreen(
     val filterType by viewModel.filterType.collectAsState()
     val favoritesOnly by viewModel.favoritesOnly.collectAsState()
     val snackbarMessage by viewModel.snackbarMessage.collectAsState()
+    val thumbnails by viewModel.thumbnails.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -440,10 +441,14 @@ fun LibraryScreen(
                         }
                     }
                     items(documents, key = { it.id }) { document ->
+                        LaunchedEffect(document.id, document.thumbnailPath) {
+                            document.thumbnailPath?.let { viewModel.loadThumbnail(document.id, it) }
+                        }
                         DocumentCard(
                             document = document,
                             onClick = { onDocumentClick(document.id) },
                             onFavoriteClick = { viewModel.toggleFavorite(document) },
+                            thumbnail = thumbnails[document.id],
                         )
                     }
                 }

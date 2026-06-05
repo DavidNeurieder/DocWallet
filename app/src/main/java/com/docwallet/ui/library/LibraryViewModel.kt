@@ -1,7 +1,10 @@
 package com.docwallet.ui.library
 
 import android.app.Application
+import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 enum class SortOption(val label: String) {
     NAME_ASC("Name A-Z"),
@@ -27,7 +31,8 @@ enum class SortOption(val label: String) {
 }
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
-    private val documentDao = (application as DocWalletApplication).documentDao
+    private val app = application as DocWalletApplication
+    private val documentDao = app.documentDao
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -143,5 +148,35 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearSnackbarMessage() {
         _snackbarMessage.value = null
+    }
+
+    private val _thumbnails = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
+    val thumbnails: StateFlow<Map<String, ImageBitmap>> = _thumbnails.asStateFlow()
+
+    fun loadThumbnail(documentId: String, thumbnailPath: String) {
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                decryptThumbnail(thumbnailPath)
+            }
+            if (bitmap != null) {
+                _thumbnails.value = _thumbnails.value + (documentId to bitmap)
+            }
+        }
+    }
+
+    private fun decryptThumbnail(path: String): ImageBitmap? {
+        return try {
+            val file = File(path)
+            if (!file.exists()) return null
+            val data = file.readBytes()
+            if (data.size < 12) return null
+            val iv = data.copyOfRange(0, 12)
+            val encrypted = data.copyOfRange(12, data.size)
+            val masterKey = app.encryptionManager.getMasterKeyForSession() ?: return null
+            val plaintext = app.fileEncryptor.decryptBytes(encrypted, masterKey, iv)
+            BitmapFactory.decodeByteArray(plaintext, 0, plaintext.size)?.asImageBitmap()
+        } catch (e: Exception) {
+            null
+        }
     }
 }
