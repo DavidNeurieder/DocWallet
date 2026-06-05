@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
@@ -63,6 +64,11 @@ class EpubReaderActivity : FragmentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
 
         enableEdgeToEdge()
 
