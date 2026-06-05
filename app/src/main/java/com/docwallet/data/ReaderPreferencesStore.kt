@@ -3,8 +3,8 @@ package com.docwallet.data
 import android.content.Context
 
 data class ReaderPreferences(
-    val fontSize: Float = 1.0f,
-    val fontFamilyName: String = FontFamilyName.SERIF.name,
+    val fontSize: Float = 1.3f,
+    val fontFamilyName: String = FontFamilyName.SANS_SERIF.name,
 )
 
 enum class FontFamilyName(val label: String) {
@@ -20,9 +20,9 @@ object ReaderPreferencesStore {
 
     fun load(context: Context): ReaderPreferences {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val fontSize = prefs.getFloat(KEY_FONT_SIZE, 1.0f)
-        val fontFamilyName = prefs.getString(KEY_FONT_FAMILY, FontFamilyName.SERIF.name)
-            ?: FontFamilyName.SERIF.name
+        val fontSize = prefs.getFloat(KEY_FONT_SIZE, 1.3f)
+        val fontFamilyName = prefs.getString(KEY_FONT_FAMILY, FontFamilyName.SANS_SERIF.name)
+            ?: FontFamilyName.SANS_SERIF.name
         return ReaderPreferences(fontSize = fontSize, fontFamilyName = fontFamilyName)
     }
 

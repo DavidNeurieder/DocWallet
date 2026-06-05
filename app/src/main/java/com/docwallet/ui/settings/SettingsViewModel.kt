@@ -27,8 +27,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val newPassword = MutableStateFlow("")
     val confirmPassword = MutableStateFlow("")
 
-    val fontSize = MutableStateFlow(1.0f)
-    val fontFamilyName = MutableStateFlow(FontFamilyName.SERIF.name)
+    val fontSize = MutableStateFlow(1.3f)
+    val fontFamilyName = MutableStateFlow(FontFamilyName.SANS_SERIF.name)
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
