@@ -22,8 +22,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -61,17 +59,9 @@ fun PdfViewer(
     }
 
     val renderedPages = remember { mutableStateMapOf<Int, Bitmap>() }
-    val listState = rememberLazyListState()
+    val initialIndex = (initialPage - 1).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     var currentPage by remember { mutableIntStateOf(1) }
-
-    LaunchedEffect(pageCount) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo }
-            .first { it.isNotEmpty() }
-        val targetIndex = (initialPage - 1).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-        if (targetIndex > 0) {
-            listState.scrollToItem(targetIndex)
-        }
-    }
 
     LaunchedEffect(listState.firstVisibleItemIndex) {
         currentPage = listState.firstVisibleItemIndex + 1

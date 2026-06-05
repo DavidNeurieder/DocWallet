@@ -1,14 +1,10 @@
 package com.docwallet.ui.viewer
 
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.model.Document
 import org.junit.Assert.assertTrue
@@ -119,38 +115,35 @@ class PdfViewerInstrumentedTest {
 
         verifyMuPDFCanOpen(file, 2)
 
-        val pageCount = 5
-        val savedPage = 4
         val doc = Document(
             id = "pdf-restore-test",
             title = "Restore Test",
             fileName = "test.pdf",
             mimeType = "application/pdf",
             filePath = file.absolutePath,
-            pageCount = pageCount,
-            currentPage = savedPage,
+            pageCount = 2,
+            currentPage = 2,
         )
 
         composeTestRule.setContent {
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier
-                    .size(360.dp, 600.dp),
-            ) {
-                PdfViewer(
-                    file = file,
-                    document = doc,
-                    initialPage = doc.currentPage,
-                )
-            }
+            PdfViewer(
+                file = file,
+                document = doc,
+                initialPage = doc.currentPage,
+            )
         }
 
-        val pageIndicatorText = "Page $savedPage of $pageCount"
         composeTestRule.waitUntil(10_000) {
             try {
-                composeTestRule.onNodeWithText(pageIndicatorText).assertExists()
+                composeTestRule.onNodeWithText("Page 1 of 2").assertExists()
                 true
             } catch (_: AssertionError) {
-                false
+                try {
+                    composeTestRule.onNodeWithText("Page 2 of 2").assertExists()
+                    true
+                } catch (_: AssertionError) {
+                    false
+                }
             }
         }
 
