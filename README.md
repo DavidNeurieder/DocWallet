@@ -58,6 +58,10 @@ sdk.dir=/path/to/Android/Sdk
 - 119 unit tests
 - 46 instrumented tests (API 15+)
 
+## AllowedAPKSigningKeys to verify Releases:
+
+SHA-256: 11f860ee7ac19b8d992a52bf114a491f9b8b598091b7a5e94ce775b50e6e69fa
+
 ## License
 
 GPL-3.0-only. See [LICENSE](LICENSE) for details.
