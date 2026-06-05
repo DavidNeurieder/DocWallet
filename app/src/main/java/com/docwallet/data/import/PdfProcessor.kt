@@ -42,7 +42,7 @@ class PdfProcessor : DocumentProcessor {
                     val pageWidth = bounds.x1 - bounds.x0
                     val scale = 200f / pageWidth
                     val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
-                    val pixmap = page.toPixmap(matrix, ColorSpace.DeviceRGB, true)
+                    val pixmap = page.toPixmap(matrix, ColorSpace.DeviceRGB, false)
                     try {
                         val bitmap = Bitmap.createBitmap(
                             pixmap.width, pixmap.height,
