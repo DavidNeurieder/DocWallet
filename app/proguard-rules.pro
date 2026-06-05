@@ -1,5 +1,14 @@
 # DocWallet ProGuard rules
+-dontobfuscate
 -keepattributes *Annotation*
+
+# MuPDF (JNI)
+-keep class com.artifex.mupdf.fitz.** { *; }
+-dontwarn com.artifex.mupdf.fitz.**
+
+# Readium2
+-keep class org.readium.** { *; }
+-dontwarn org.readium.**
 
 # SQLCipher
 -keep class net.sqlcipher.** { *; }
@@ -8,6 +17,10 @@
 # Keep Kotlin Serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
+-keepclassmembers class kotlinx.serialization.json.** { *** Companion; }
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
 
 # ZXing
 -keep class com.google.zxing.** { *; }
@@ -28,6 +41,9 @@
 # Coil
 -keep class coil.** { *; }
 -dontwarn coil.**
+
+# SLF4J (used by junrar / commons-compress, no binding needed on Android)
+-dontwarn org.slf4j.impl.StaticLoggerBinder
 
 # Room
 -keep class * extends androidx.room.RoomDatabase
