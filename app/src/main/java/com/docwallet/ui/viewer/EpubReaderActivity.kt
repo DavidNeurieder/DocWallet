@@ -12,12 +12,16 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commit
 import com.docwallet.DocWalletApplication
+import com.docwallet.data.FontFamilyName
+import com.docwallet.data.ReaderPreferencesStore
 import com.docwallet.data.SessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Try
@@ -78,9 +82,23 @@ class EpubReaderActivity : FragmentActivity() {
             }
 
             val initialLocator = loadLocator()
+
+            val readerPrefs = ReaderPreferencesStore.load(this)
+            val initialPreferences = EpubPreferences(
+                fontSize = readerPrefs.fontSize.toDouble(),
+                fontFamily = when (readerPrefs.fontFamilyName) {
+                    FontFamilyName.SANS_SERIF.name -> FontFamily.SANS_SERIF
+                    FontFamilyName.OPEN_DYSLEXIC.name -> FontFamily.OPEN_DYSLEXIC
+                    else -> FontFamily.SERIF
+                },
+            )
+
             val navigatorFactory = EpubNavigatorFactory(publication)
             supportFragmentManager.fragmentFactory =
-                navigatorFactory.createFragmentFactory(initialLocator = initialLocator)
+                navigatorFactory.createFragmentFactory(
+                    initialLocator = initialLocator,
+                    initialPreferences = initialPreferences,
+                )
 
             if (savedInstanceState == null) {
                 supportFragmentManager.commit {
