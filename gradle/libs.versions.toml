@@ -23,6 +23,7 @@ kotlinSerializationJson = "1.6.2"
 work = "2.9.0"
 preference = "1.2.1"
 readium = "3.0.0"
+desugarJdkLibs = "2.0.4"
 
 
 # Test
@@ -66,6 +67,10 @@ junrar = { group = "com.github.junrar", name = "junrar", version.ref = "junrar" 
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinSerializationJson" }
 work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 preference-ktx = { group = "androidx.preference", name = "preference-ktx", version.ref = "preference" }
+readium-shared = { group = "org.readium.kotlin-toolkit", name = "readium-shared", version.ref = "readium" }
+readium-streamer = { group = "org.readium.kotlin-toolkit", name = "readium-streamer", version.ref = "readium" }
+readium-navigator = { group = "org.readium.kotlin-toolkit", name = "readium-navigator", version.ref = "readium" }
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 # Test
 junit = { group = "junit", name = "junit", version.ref = "junit" }
