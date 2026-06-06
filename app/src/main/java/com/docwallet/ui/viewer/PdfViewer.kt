@@ -2,7 +2,6 @@ package com.docwallet.ui.viewer
 
 import android.graphics.Bitmap
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -171,15 +170,14 @@ fun PdfViewer(
             }
         }
 
-        AnimatedVisibility(
-            visible = !isFullscreen,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
+        if (!isFullscreen) {
             Text(
                 text = "Page $currentPage of $pageCount",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
             )
         }
     }

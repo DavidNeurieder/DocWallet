@@ -32,7 +32,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.app.Activity
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -127,7 +126,7 @@ fun ViewerScreen(
 
     Scaffold(
         topBar = {
-            AnimatedVisibility(visible = !isFullscreen) {
+            if (!isFullscreen) {
                 TopAppBar(
                     title = {
                         Text(
