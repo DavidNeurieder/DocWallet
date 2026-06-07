@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
+
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -166,6 +167,9 @@ class EpubReaderActivity : FragmentActivity() {
                     FontFamilyName.OPEN_DYSLEXIC.name -> FontFamily.OPEN_DYSLEXIC
                     else -> FontFamily.SERIF
                 },
+                lineHeight = readerPrefs.lineHeight.toDouble(),
+                pageMargins = readerPrefs.pageMargins.toDouble(),
+                publisherStyles = false,
             )
 
             val navigatorFactory = EpubNavigatorFactory(publication)
@@ -461,9 +465,16 @@ private fun EpubReaderScreen(
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
+                        val marginPx = with(context.resources.displayMetrics) {
+                            (ReaderPreferencesStore.load(context).topBottomMargin * density).toInt()
+                        }
                         FrameLayout(context).apply {
+                            setBackgroundColor(android.graphics.Color.WHITE)
                             addView(
-                                FragmentContainerView(context).apply { id = containerId },
+                                FragmentContainerView(context).apply {
+                                    id = containerId
+                                    setPadding(0, marginPx, 0, marginPx)
+                                },
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                             )
@@ -556,6 +567,9 @@ private fun ReaderSettingsDialog(
     val prefs = remember { ReaderPreferencesStore.load(context) }
     var fontSize by remember { mutableStateOf(prefs.fontSize) }
     var fontFamilyName by remember { mutableStateOf(prefs.fontFamilyName) }
+    var lineHeight by remember { mutableStateOf(prefs.lineHeight) }
+    var pageMargins by remember { mutableStateOf(prefs.pageMargins) }
+    var topBottomMargin by remember { mutableStateOf(prefs.topBottomMargin) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -593,11 +607,83 @@ private fun ReaderSettingsDialog(
                         fontFamilyName = selected.name
                     },
                 )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Line spacing", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "${String.format(Locale.ROOT, "%.1f", lineHeight)}x",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Slider(
+                    value = lineHeight,
+                    onValueChange = { lineHeight = it },
+                    valueRange = 1.0f..2.5f,
+                    steps = 5,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Page margins", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "${String.format(Locale.ROOT, "%.1f", pageMargins)}x",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Slider(
+                    value = pageMargins,
+                    onValueChange = { pageMargins = it },
+                    valueRange = 0.0f..3.0f,
+                    steps = 5,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Top/bottom margin", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "${String.format(Locale.ROOT, "%.0f", topBottomMargin)} dp",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Slider(
+                    value = topBottomMargin,
+                    onValueChange = { topBottomMargin = it },
+                    valueRange = 0f..50f,
+                    steps = 9,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val prefsToSave = ReaderPreferences(fontSize = fontSize, fontFamilyName = fontFamilyName)
+                val prefsToSave = ReaderPreferences(
+                    fontSize = fontSize,
+                    fontFamilyName = fontFamilyName,
+                    lineHeight = lineHeight,
+                    pageMargins = pageMargins,
+                    topBottomMargin = topBottomMargin,
+                )
                 ReaderPreferencesStore.save(context, prefsToSave)
                 val fragment = context.supportFragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
                 if (fragment != null) {
@@ -608,8 +694,15 @@ private fun ReaderSettingsDialog(
                             FontFamilyName.OPEN_DYSLEXIC.name -> FontFamily.OPEN_DYSLEXIC
                             else -> FontFamily.SERIF
                         },
+                        lineHeight = lineHeight.toDouble(),
+                        pageMargins = pageMargins.toDouble(),
+                        publisherStyles = false,
                     ))
                 }
+                val density = context.resources.displayMetrics.density
+                val marginPx = (topBottomMargin * density).toInt()
+                context.findViewById<androidx.fragment.app.FragmentContainerView>(containerId)
+                    ?.setPadding(0, marginPx, 0, marginPx)
                 onDismiss()
             }) {
                 Text("Apply")
