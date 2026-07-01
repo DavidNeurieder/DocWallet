@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.docwallet.data.model.Document
 import net.sqlcipher.database.SupportFactory
+import java.util.Arrays
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -71,7 +72,8 @@ abstract class DocWalletDatabase : RoomDatabase() {
         }
 
         fun create(context: Context, passphrase: ByteArray): DocWalletDatabase {
-            val factory = SupportFactory(passphrase.copyOf(), null, false)
+            val passphraseCopy = passphrase.copyOf()
+            val factory = SupportFactory(passphraseCopy, null, false)
             return Room.databaseBuilder(
                 context.applicationContext,
                 DocWalletDatabase::class.java,
@@ -80,6 +82,7 @@ abstract class DocWalletDatabase : RoomDatabase() {
                 .openHelperFactory(factory)
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
+                .also { Arrays.fill(passphraseCopy, 0) }
         }
     }
 }

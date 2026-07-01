@@ -69,6 +69,7 @@ class ViewerViewModel @JvmOverloads constructor(
                         document
                     }
                     val emptyFile = File(app.cacheDir, "viewer_${doc.id}_${doc.fileName}")
+                    emptyFile.deleteOnExit()
                     emptyFile.writeText("")
                     _decryptedFile.value = emptyFile
                     _document.value = doc
@@ -90,6 +91,7 @@ class ViewerViewModel @JvmOverloads constructor(
                 val encryptedFile = File(doc.filePath)
                 val tempFile = File(app.cacheDir, "viewer_${doc.id}_${doc.fileName}")
                 if (tempFile.exists()) tempFile.delete()
+                tempFile.deleteOnExit()
                 val iv = doc.encryptionIv
                     ?: throw IllegalArgumentException("Document has no encryption IV")
                 fileEncryptor.decrypt(encryptedFile, tempFile, masterKey, iv)
@@ -173,6 +175,10 @@ class ViewerViewModel @JvmOverloads constructor(
 
     override fun onCleared() {
         super.onCleared()
+        cleanupTempFiles()
+    }
+
+    fun cleanupTempFiles() {
         _decryptedFile.value?.let { file ->
             try {
                 if (file.exists()) file.delete()

@@ -47,6 +47,7 @@ class DocumentRepository(
                 ?: throw IllegalStateException("No master key available for decryption")
             val tempFile = File(context.cacheDir, "decrypted_${document.id}_${document.fileName}")
             if (tempFile.exists()) tempFile.delete()
+            tempFile.deleteOnExit()
             val encryptedFile = File(document.filePath)
             val iv = document.encryptionIv
                 ?: throw IllegalArgumentException("Document has no encryption IV")

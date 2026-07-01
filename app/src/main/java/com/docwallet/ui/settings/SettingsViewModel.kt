@@ -42,11 +42,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        if (encryptionManager.setPassword(pwd)) {
-            _message.value = "Password set successfully"
-            clearFields()
-        } else {
-            _message.value = "Failed to set password"
+        viewModelScope.launch(Dispatchers.Default) {
+            if (encryptionManager.setPassword(pwd)) {
+                _message.value = "Password set successfully"
+                clearFields()
+            } else {
+                _message.value = "Failed to set password"
+            }
         }
     }
 
@@ -66,11 +68,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        if (encryptionManager.changePassword(old, new)) {
-            _message.value = "Password changed successfully"
-            clearFields()
-        } else {
-            _message.value = "Failed to change password. Check your current password."
+        viewModelScope.launch(Dispatchers.Default) {
+            if (encryptionManager.changePassword(old, new)) {
+                _message.value = "Password changed successfully"
+                clearFields()
+            } else {
+                _message.value = "Failed to change password. Check your current password."
+            }
         }
     }
 
@@ -80,15 +84,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             _message.value = "Enter your current password to disable"
             return
         }
-        if (!encryptionManager.verifyPassword(pwd)) {
-            _message.value = "Wrong password"
-            return
-        }
-        if (encryptionManager.disablePassword()) {
-            _message.value = "Password disabled. Using device-level encryption."
-            clearFields()
-        } else {
-            _message.value = "Failed to disable password"
+        viewModelScope.launch(Dispatchers.Default) {
+            if (!encryptionManager.verifyPassword(pwd)) {
+                _message.value = "Wrong password"
+                return@launch
+            }
+            if (encryptionManager.disablePassword()) {
+                _message.value = "Password disabled. Using device-level encryption."
+                clearFields()
+            } else {
+                _message.value = "Failed to disable password"
+            }
         }
     }
 

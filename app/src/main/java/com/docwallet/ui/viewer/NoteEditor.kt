@@ -2,6 +2,7 @@ package com.docwallet.ui.viewer
 
 import android.view.View
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -171,6 +172,9 @@ fun NoteEditor(
                         settings.loadWithOverviewMode = true
                         settings.useWideViewPort = true
                         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
+                        }
                     }
                 },
                 update = { webView ->
@@ -188,7 +192,13 @@ fun NoteEditor(
                         <body>$html</body>
                         </html>
                     """.trimIndent()
-                    webView.loadDataWithBaseURL(null, styledHtml, "text/html", "UTF-8", null)
+                    webView.loadDataWithBaseURL(
+                        "https://docwallet.local/",
+                        styledHtml,
+                        "text/html",
+                        "UTF-8",
+                        null,
+                    )
                 },
                 modifier = Modifier.fillMaxSize(),
             )

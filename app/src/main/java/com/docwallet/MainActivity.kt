@@ -77,20 +77,32 @@ class MainActivity : ComponentActivity() {
         handleShareIntent(intent)
     }
 
-    @Suppress("DEPRECATION")
     private fun handleShareIntent(intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-                if (uri != null) {
-                    pendingShareUris.value = listOf(uri)
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    if (uri != null && uri.scheme == "content") {
+                        pendingShareUris.value = listOf(uri)
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                    if (uri != null && uri.scheme == "content") {
+                        pendingShareUris.value = listOf(uri)
+                    }
                 }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
-                val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-                if (uris != null) {
-                    pendingShareUris.value = uris.filterNotNull()
+                val uris: List<Uri> = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                        ?: emptyList()
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                        ?: emptyList()
                 }
+                pendingShareUris.value = uris.filter { it.scheme == "content" }
             }
         }
     }

@@ -11,6 +11,7 @@ import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentListItem
 import com.docwallet.data.model.Document
 import com.docwallet.data.model.DocumentType
+import com.docwallet.ui.common.ThumbnailCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -192,13 +193,24 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     fun loadThumbnail(documentId: String, thumbnailPath: String) {
         viewModelScope.launch {
+            val cached = ThumbnailCache.get(documentId)
+            if (cached != null) {
+                _thumbnails.value = _thumbnails.value + (documentId to cached.asImageBitmap())
+                return@launch
+            }
             thumbnailSemaphore.acquire()
             try {
                 val bitmap = withContext(Dispatchers.IO) {
                     decryptThumbnail(thumbnailPath)
                 }
                 if (bitmap != null) {
-                    _thumbnails.value = _thumbnails.value + (documentId to bitmap)
+                    ThumbnailCache.put(documentId, bitmap)
+                    _thumbnails.value = _thumbnails.value + (documentId to bitmap.asImageBitmap())
+                    if (_thumbnails.value.size > 100) {
+                        val toEvict = _thumbnails.value.keys
+                            .sorted().take(_thumbnails.value.size - 50)
+                        _thumbnails.value = _thumbnails.value - toEvict.toSet()
+                    }
                 }
             } finally {
                 thumbnailSemaphore.release()
@@ -206,7 +218,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun decryptThumbnail(path: String): ImageBitmap? {
+    private fun decryptThumbnail(path: String): android.graphics.Bitmap? {
         return try {
             val file = File(path)
             if (!file.exists()) return null
@@ -220,7 +232,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     app.fileEncryptor.decryptBytes(encrypted, masterKey, iv)
                 }
             }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         } catch (e: Exception) {
             null
         }

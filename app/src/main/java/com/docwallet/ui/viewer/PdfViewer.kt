@@ -7,8 +7,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -21,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,8 +42,12 @@ import com.artifex.mupdf.fitz.Matrix
 import com.docwallet.data.PageFitMode
 import com.docwallet.data.PdfPreferences
 import com.docwallet.data.model.Document as DocWalletDocument
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
+
+private const val MAX_CACHED_PAGES = 12
 
 private val invertColorMatrix = ColorMatrix(
     floatArrayOf(
@@ -61,25 +68,31 @@ fun PdfViewer(
     isFullscreen: Boolean = false,
     pdfPreferences: PdfPreferences = PdfPreferences(),
 ) {
-    val pageCount = remember(document.pageCount) {
-        if (document.pageCount > 0) document.pageCount
-        else try {
-            val doc = Document.openDocument(file.absolutePath)
-            try {
-                doc.countPages()
-            } finally {
-                doc.destroy()
-            }
-        } catch (e: Exception) {
-            Log.w("PdfViewer", "Failed to load page count", e)
-            0
-        }
-    }
-
-    val renderedPages = remember { mutableStateMapOf<Int, Bitmap>() }
+    var pageCount by remember { mutableIntStateOf(document.pageCount) }
     val initialIndex = (initialPage - 1).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     var currentPage by remember { mutableIntStateOf(1) }
+
+    val renderedPages = remember { mutableStateMapOf<Int, Bitmap>() }
+
+    LaunchedEffect(Unit) {
+        if (pageCount <= 0) {
+            val count = withContext(Dispatchers.IO) {
+                try {
+                    val doc = Document.openDocument(file.absolutePath)
+                    try {
+                        doc.countPages()
+                    } finally {
+                        doc.destroy()
+                    }
+                } catch (e: Exception) {
+                    Log.w("PdfViewer", "Failed to load page count", e)
+                    0
+                }
+            }
+            pageCount = count
+        }
+    }
 
     LaunchedEffect(listState.firstVisibleItemIndex) {
         currentPage = listState.firstVisibleItemIndex + 1
@@ -88,38 +101,48 @@ fun PdfViewer(
         val end = minOf(pageCount - 1, listState.firstVisibleItemIndex + 3)
         for (i in start..end) {
             if (i !in renderedPages) {
-                try {
-                    val doc = Document.openDocument(file.absolutePath)
+                withContext(Dispatchers.IO) {
                     try {
-                        val page = doc.loadPage(i)
+                        val doc = Document.openDocument(file.absolutePath)
                         try {
-                            val scale = 150f / 72f
-                            val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
-                            val pixmap = page.toPixmap(
-                                matrix, ColorSpace.DeviceRGB, true
-                            )
+                            val page = doc.loadPage(i)
                             try {
-                                val bitmap = Bitmap.createBitmap(
-                                    pixmap.width, pixmap.height,
-                                    Bitmap.Config.ARGB_8888
+                                val scale = 150f / 72f
+                                val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
+                                val pixmap = page.toPixmap(
+                                    matrix, ColorSpace.DeviceRGB, true
                                 )
-                                bitmap.copyPixelsFromBuffer(
-                                    ByteBuffer.wrap(pixmap.samples)
-                                )
-                                renderedPages[i] = bitmap
+                                try {
+                                    val bitmap = Bitmap.createBitmap(
+                                        pixmap.width, pixmap.height,
+                                        Bitmap.Config.ARGB_8888
+                                    )
+                                    bitmap.copyPixelsFromBuffer(
+                                        ByteBuffer.wrap(pixmap.samples)
+                                    )
+                                    renderedPages[i] = bitmap
+                                } finally {
+                                    pixmap.destroy()
+                                }
                             } finally {
-                                pixmap.destroy()
+                                page.destroy()
                             }
                         } finally {
-                            page.destroy()
+                            doc.destroy()
                         }
-                    } finally {
-                        doc.destroy()
+                    } catch (e: Exception) {
+                        Log.e("PdfViewer", "Failed to render page $i", e)
                     }
-                } catch (e: Exception) {
-                    Log.e("PdfViewer", "Failed to render page $i", e)
                 }
             }
+        }
+        if (renderedPages.size > MAX_CACHED_PAGES) {
+            val visible = (start..end).toSet()
+            val toEvict = renderedPages.keys
+                .filter { it !in visible }
+                .sorted()
+                .take(renderedPages.size - MAX_CACHED_PAGES)
+            toEvict.forEach { renderedPages.remove(it)?.recycle() }
         }
     }
 
@@ -182,18 +205,11 @@ fun PdfViewer(
                         colorFilter = pageColorFilter,
                     )
                 } else {
-                    Box(
+                    Spacer(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Page ${index + 1}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                            .height(16.dp),
+                    )
                 }
             }
         }

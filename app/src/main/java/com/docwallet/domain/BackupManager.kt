@@ -119,8 +119,28 @@ class BackupManager(
 
                 val tempFiles = File(tempDir, "files")
                 if (tempFiles.exists()) {
-                    context.filesDir.listFiles()?.forEach { it.deleteRecursively() }
-                    copyDirectoryContents(tempFiles, context.filesDir)
+                    val oldBackup = File(context.cacheDir, "pre_restore_${System.currentTimeMillis()}")
+                    try {
+                        context.filesDir.listFiles()?.forEach { file ->
+                            if (file.isDirectory) {
+                                file.copyRecursively(File(oldBackup, file.name), overwrite = true)
+                            } else {
+                                file.copyTo(File(oldBackup, file.name), overwrite = true)
+                            }
+                        }
+                        context.filesDir.listFiles()?.forEach { it.deleteRecursively() }
+                        copyDirectoryContents(tempFiles, context.filesDir)
+                    } catch (e: Exception) {
+                        oldBackup.listFiles()?.forEach { backupFile ->
+                            backupFile.copyRecursively(
+                                File(context.filesDir, backupFile.name),
+                                overwrite = true
+                            )
+                        }
+                        throw e
+                    } finally {
+                        oldBackup.deleteRecursively()
+                    }
                 }
 
                 tempDir.deleteRecursively()

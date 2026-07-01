@@ -6,70 +6,66 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 class EpubProcessor : DocumentProcessor {
 
     override suspend fun process(input: File, mimeType: String): ProcessorResult = withContext(Dispatchers.IO) {
-        val entries = mutableMapOf<String, ByteArray>()
+        val zip = ZipFile(input)
 
-        ZipInputStream(input.inputStream()).use { zis ->
-            var entry: ZipEntry? = zis.nextEntry
-            while (entry != null) {
-                if (!entry.isDirectory) {
-                    entries[entry.name] = zis.readBytes()
+        try {
+            val containerEntry = zip.getEntry("META-INF/container.xml")
+                ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
+            val containerXml = zip.getInputStream(containerEntry).readBytes()
+            val opfPath = parseContainerXml(containerXml)
+                ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
+
+            val opfEntry = zip.getEntry(opfPath)
+                ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
+            val opfData = zip.getInputStream(opfEntry).readBytes()
+
+            val opfDir = opfPath.substringBeforeLast('/', "").let { if (it.isNotEmpty()) "$it/" else "" }
+            val (title, author, coverPath, spineItems) = parseOpf(opfData)
+
+            val pageCount = spineItems.size
+
+            val textContent = buildString {
+                for (item in spineItems) {
+                    val href = if (opfDir.isNotEmpty() && !item.startsWith("/")) "$opfDir$item" else item
+                    val entry = zip.getEntry(href) ?: continue
+                    val htmlData = zip.getInputStream(entry).readBytes()
+                    val text = htmlData.decodeToString()
+                    val stripped = text.replace(Regex("<[^>]*>"), " ")
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+                    if (stripped.isNotEmpty()) {
+                        appendLine(stripped)
+                    }
                 }
-                zis.closeEntry()
-                entry = zis.nextEntry
+            }.takeIf { it.isNotBlank() }
+
+            val thumbnailBitmap = coverPath?.let { cover ->
+                val href = if (opfDir.isNotEmpty() && !cover.startsWith("/")) "$opfDir$cover" else cover
+                val entry = zip.getEntry(href)
+                if (entry != null) {
+                    val data = zip.getInputStream(entry).readBytes()
+                    BitmapFactory.decodeByteArray(data, 0, data.size)?.let { bmp ->
+                        scaleToWidth(bmp, 200)
+                    }
+                } else null
             }
+
+            ProcessorResult(
+                title = title.takeIf { it.isNotBlank() } ?: input.nameWithoutExtension,
+                author = author,
+                pageCount = pageCount,
+                textContent = textContent,
+                thumbnailBitmap = thumbnailBitmap,
+            )
+        } finally {
+            zip.close()
         }
-
-        val containerXml = entries["META-INF/container.xml"]
-            ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
-
-        val opfPath = parseContainerXml(containerXml)
-            ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
-
-        val opfData = entries[opfPath]
-            ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
-
-        val opfDir = opfPath.substringBeforeLast('/', "").let { if (it.isNotEmpty()) "$it/" else "" }
-        val (title, author, coverPath, spineItems) = parseOpf(opfData)
-
-        val pageCount = spineItems.size
-
-        val textContent = buildString {
-            for (item in spineItems) {
-                val href = if (opfDir.isNotEmpty() && !item.startsWith("/")) "$opfDir$item" else item
-                val htmlData = entries[href] ?: continue
-                val text = htmlData.decodeToString()
-                val stripped = text.replace(Regex("<[^>]*>"), " ")
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
-                if (stripped.isNotEmpty()) {
-                    appendLine(stripped)
-                }
-            }
-        }.takeIf { it.isNotBlank() }
-
-        val thumbnailBitmap = coverPath?.let { cover ->
-            val href = if (opfDir.isNotEmpty() && !cover.startsWith("/")) "$opfDir$cover" else cover
-            entries[href]?.let { data ->
-                BitmapFactory.decodeByteArray(data, 0, data.size)?.let { bmp ->
-                    scaleToWidth(bmp, 200)
-                }
-            }
-        }
-
-        ProcessorResult(
-            title = title.takeIf { it.isNotBlank() } ?: input.nameWithoutExtension,
-            author = author,
-            pageCount = pageCount,
-            textContent = textContent,
-            thumbnailBitmap = thumbnailBitmap,
-        )
     }
 
     private fun parseContainerXml(data: ByteArray): String? {

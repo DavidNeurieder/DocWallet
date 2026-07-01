@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.encryption.EncryptionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun PasswordSetupScreen(
@@ -47,6 +51,7 @@ fun PasswordSetupScreen(
 ) {
     val context = LocalContext.current
     val encryptionManager = (context.applicationContext as DocWalletApplication).encryptionManager
+    val scope = rememberCoroutineScope()
 
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -134,7 +139,7 @@ fun PasswordSetupScreen(
                 keyboardActions = KeyboardActions(
                     onDone = {
                         doSetPassword(
-                            password, confirmPassword, encryptionManager,
+                            password, confirmPassword, encryptionManager, scope,
                             onError = { error = it },
                             onSuccess = onComplete,
                         )
@@ -148,7 +153,7 @@ fun PasswordSetupScreen(
             Button(
                 onClick = {
                     doSetPassword(
-                        password, confirmPassword, encryptionManager,
+                        password, confirmPassword, encryptionManager, scope,
                         onError = { error = it },
                         onSuccess = onComplete,
                     )
@@ -182,8 +187,10 @@ fun PasswordSetupScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showSkipDialog = false
-                    encryptionManager.initializeDeviceKeyMode()
-                    onComplete()
+                    scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                        encryptionManager.initializeDeviceKeyMode()
+                        onComplete()
+                    }
                 }) {
                     Text("Skip")
                 }
@@ -201,6 +208,7 @@ private fun doSetPassword(
     password: String,
     confirmPassword: String,
     encryptionManager: EncryptionManager,
+    scope: CoroutineScope,
     onError: (String) -> Unit,
     onSuccess: () -> Unit,
 ) {
@@ -208,11 +216,13 @@ private fun doSetPassword(
         password.length < 6 -> onError("Password must be at least 6 characters")
         password != confirmPassword -> onError("Passwords do not match")
         else -> {
-            encryptionManager.initializeDeviceKeyMode()
-            if (encryptionManager.setPassword(password)) {
-                onSuccess()
-            } else {
-                onError("Failed to set password")
+            scope.launch(Dispatchers.Default) {
+                encryptionManager.initializeDeviceKeyMode()
+                if (encryptionManager.setPassword(password)) {
+                    onSuccess()
+                } else {
+                    onError("Failed to set password")
+                }
             }
         }
     }
