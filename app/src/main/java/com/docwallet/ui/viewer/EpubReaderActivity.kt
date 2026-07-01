@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -91,7 +92,6 @@ import com.docwallet.data.SessionStore
 import com.docwallet.data.model.Document
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
@@ -115,12 +115,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private const val TAG = "EpubReaderActivity"
+
 class EpubReaderActivity : FragmentActivity() {
 
     companion object {
         private const val EXTRA_FILE_PATH = "epub_file_path"
         private const val EXTRA_DOCUMENT_ID = "document_id"
-        private const val TAG = "EpubReaderActivity"
 
         fun start(context: Context, filePath: String, documentId: String) {
             val intent = Intent(context, EpubReaderActivity::class.java).apply {
@@ -134,7 +135,6 @@ class EpubReaderActivity : FragmentActivity() {
     @JvmField
     internal var containerId: Int = View.generateViewId()
     private var documentId: String? = null
-    private var publication: Publication? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         documentId = intent?.getStringExtra(EXTRA_DOCUMENT_ID)
@@ -155,63 +155,15 @@ class EpubReaderActivity : FragmentActivity() {
 
         containerId = View.generateViewId()
 
-        val doc = try {
-            runBlocking(Dispatchers.IO) {
-                documentId?.let { id ->
-                    (application as DocWalletApplication).documentDao.getDocumentById(id)
-                }
-            }
-        } catch (_: Exception) {
-            null
-        }
-
-        try {
-            val pub = runBlocking(Dispatchers.IO) {
-                openPublication(file)
-            }
-            publication = pub
-
-            val initialLocator = loadLocator()
-
-            val readerPrefs = ReaderPreferencesStore.load(this)
-            val initialPreferences = EpubPreferences(
-                fontSize = readerPrefs.fontSize.toDouble(),
-                fontFamily = when (readerPrefs.fontFamilyName) {
-                    FontFamilyName.SANS_SERIF.name -> FontFamily.SANS_SERIF
-                    FontFamilyName.OPEN_DYSLEXIC.name -> FontFamily.OPEN_DYSLEXIC
-                    else -> FontFamily.SERIF
-                },
-                lineHeight = readerPrefs.lineHeight.toDouble(),
-                pageMargins = readerPrefs.pageMargins.toDouble(),
-                publisherStyles = false,
-            )
-
-            val navigatorFactory = EpubNavigatorFactory(pub)
-            supportFragmentManager.fragmentFactory =
-                navigatorFactory.createFragmentFactory(
-                    initialLocator = initialLocator,
-                    initialPreferences = initialPreferences,
-                )
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open EPUB", e)
-            Toast.makeText(
-                this,
-                "Failed to open EPUB: ${e.message}",
-                Toast.LENGTH_LONG
-            ).show()
-            finish()
-            return
-        }
-
         setContent {
             val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
             MaterialTheme(colorScheme = colorScheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    EpubReaderScreen(
-                        document = doc,
+                    EpubReaderHost(
+                        file = file,
+                        documentId = documentId,
                         containerId = containerId,
-                        publication = publication,
+                        activity = this@EpubReaderActivity,
                         onBack = { finish() },
                         onToggleFavorite = { toggleFavorite() },
                     )
@@ -228,37 +180,6 @@ class EpubReaderActivity : FragmentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val app = application as DocWalletApplication
             val doc = app.documentDao.getDocumentById(docId) ?: return@launch
-            app.documentDao.update(
-                doc.copy(
-                    readingPosition = locator.toJSON().toString(),
-                    lastOpenedAt = System.currentTimeMillis(),
-                )
-            )
-        }
-    }
-
-    private fun loadLocator(): Locator? {
-        val docId = documentId ?: return null
-        return runBlocking(Dispatchers.IO) {
-            val app = application as DocWalletApplication
-            val doc = app.documentDao.getDocumentById(docId) ?: return@runBlocking null
-            val json = doc.readingPosition ?: return@runBlocking null
-            try {
-                Locator.fromJSON(JSONObject(json))
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
-    private fun saveCurrentLocator() {
-        val docId = documentId ?: return
-        val fragment = supportFragmentManager.findFragmentById(containerId) as? EpubNavigatorFragment
-            ?: return
-        val locator = fragment.currentLocator.value
-        runBlocking(Dispatchers.IO) {
-            val app = application as DocWalletApplication
-            val doc = app.documentDao.getDocumentById(docId) ?: return@runBlocking
             app.documentDao.update(
                 doc.copy(
                     readingPosition = locator.toJSON().toString(),
@@ -300,6 +221,114 @@ class EpubReaderActivity : FragmentActivity() {
             is Try.Failure -> throw RuntimeException(
                 "Publication open failed: ${result.value.message}"
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalReadiumApi::class)
+@Composable
+private fun EpubReaderHost(
+    file: File,
+    documentId: String?,
+    containerId: Int,
+    activity: FragmentActivity,
+    onBack: () -> Unit,
+    onToggleFavorite: () -> Unit,
+) {
+    val context = LocalContext.current as FragmentActivity
+    var publication by remember { mutableStateOf<Publication?>(null) }
+    var document by remember { mutableStateOf<Document?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var isReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val app = context.application as DocWalletApplication
+
+            val doc = withContext(Dispatchers.IO) {
+                documentId?.let { app.documentDao.getDocumentById(it) }
+            }
+            document = doc
+
+            val pub = withContext(Dispatchers.IO) {
+                val httpClient = DefaultHttpClient()
+                val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
+                val parser = DefaultPublicationParser(
+                    context,
+                    httpClient,
+                    assetRetriever,
+                    pdfFactory = null
+                )
+                val opener = PublicationOpener(parser)
+                val asset = when (val result = assetRetriever.retrieve(file)) {
+                    is Try.Success -> result.value
+                    is Try.Failure -> throw RuntimeException(
+                        "Asset retrieval failed: ${result.value.message}"
+                    )
+                }
+                when (val result = opener.open(asset, allowUserInteraction = false)) {
+                    is Try.Success -> result.value
+                    is Try.Failure -> throw RuntimeException(
+                        "Publication open failed: ${result.value.message}"
+                    )
+                }
+            }
+            publication = pub
+
+            val initialLocator = withContext(Dispatchers.IO) {
+                val app2 = context.application as DocWalletApplication
+                documentId?.let { id ->
+                    val docEntry = app2.documentDao.getDocumentById(id)
+                    docEntry?.readingPosition?.let { json ->
+                        try {
+                            Locator.fromJSON(JSONObject(json))
+                        } catch (_: Exception) { null }
+                    }
+                }
+            }
+
+            val readerPrefs = ReaderPreferencesStore.load(context)
+            val initialPreferences = EpubPreferences(
+                fontSize = readerPrefs.fontSize.toDouble(),
+                fontFamily = when (readerPrefs.fontFamilyName) {
+                    FontFamilyName.SANS_SERIF.name -> FontFamily.SANS_SERIF
+                    FontFamilyName.OPEN_DYSLEXIC.name -> FontFamily.OPEN_DYSLEXIC
+                    else -> FontFamily.SERIF
+                },
+                lineHeight = readerPrefs.lineHeight.toDouble(),
+                pageMargins = readerPrefs.pageMargins.toDouble(),
+                publisherStyles = false,
+            )
+
+            val navigatorFactory = EpubNavigatorFactory(pub)
+            activity.supportFragmentManager.fragmentFactory =
+                navigatorFactory.createFragmentFactory(
+                    initialLocator = initialLocator,
+                    initialPreferences = initialPreferences,
+                )
+            isReady = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open EPUB", e)
+            error = e.message
+        }
+    }
+
+    when {
+        error != null -> {
+            LaunchedEffect(error) {
+                Toast.makeText(context, "Failed to open EPUB: $error", Toast.LENGTH_LONG).show()
+                (context as? FragmentActivity)?.finish()
+            }
+        }
+        isReady -> EpubReaderScreen(
+            document = document,
+            containerId = containerId,
+            publication = publication,
+            onBack = onBack,
+            onToggleFavorite = onToggleFavorite,
+        )
+        else -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
         }
     }
 }

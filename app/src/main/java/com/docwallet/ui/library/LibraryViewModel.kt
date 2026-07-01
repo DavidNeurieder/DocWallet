@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
+import com.docwallet.data.db.DocumentListItem
 import com.docwallet.data.model.Document
 import com.docwallet.data.model.DocumentType
 import kotlinx.coroutines.Dispatchers
@@ -18,8 +19,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import java.io.DataInputStream
 import java.io.File
+import java.io.FileInputStream
 
 enum class SortOption(val label: String) {
     NAME_ASC("Name A-Z"),
@@ -51,13 +55,33 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val documents: StateFlow<List<Document>> = combine(
-        documentDao.getAllDocuments(),
+        documentDao.getDocumentList(),
         searchQuery,
         selectedSort,
         filterType,
         favoritesOnly
-    ) { docs, query, sort, type, favs ->
-        var result = docs
+    ) { items, query, sort, type, favs ->
+        var result = items.map { item ->
+            Document(
+                id = item.id,
+                title = item.title,
+                fileName = item.fileName,
+                mimeType = item.mimeType,
+                fileSize = item.fileSize,
+                pageCount = item.pageCount,
+                author = item.author,
+                description = item.description,
+                thumbnailPath = item.thumbnailPath,
+                importedAt = item.importedAt,
+                lastOpenedAt = item.lastOpenedAt,
+                isFavorite = item.isFavorite,
+                collectionId = item.collectionId,
+                barcodeFormat = item.barcodeFormat,
+                barcodeValue = item.barcodeValue,
+                currentPage = item.currentPage,
+                readingPosition = item.readingPosition,
+            )
+        }
 
         if (type != null) {
             result = result.filter { doc ->
@@ -91,7 +115,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         viewModelScope.launch {
-            documentDao.getAllDocuments().collect {
+            documentDao.getDocumentList().collect {
                 _isLoading.value = false
             }
         }
@@ -164,13 +188,20 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     private val _thumbnails = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
     val thumbnails: StateFlow<Map<String, ImageBitmap>> = _thumbnails.asStateFlow()
 
+    private val thumbnailSemaphore = Semaphore(4)
+
     fun loadThumbnail(documentId: String, thumbnailPath: String) {
         viewModelScope.launch {
-            val bitmap = withContext(Dispatchers.IO) {
-                decryptThumbnail(thumbnailPath)
-            }
-            if (bitmap != null) {
-                _thumbnails.value = _thumbnails.value + (documentId to bitmap)
+            thumbnailSemaphore.acquire()
+            try {
+                val bitmap = withContext(Dispatchers.IO) {
+                    decryptThumbnail(thumbnailPath)
+                }
+                if (bitmap != null) {
+                    _thumbnails.value = _thumbnails.value + (documentId to bitmap)
+                }
+            } finally {
+                thumbnailSemaphore.release()
             }
         }
     }
@@ -179,13 +210,17 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         return try {
             val file = File(path)
             if (!file.exists()) return null
-            val data = file.readBytes()
-            if (data.size < 12) return null
-            val iv = data.copyOfRange(0, 12)
-            val encrypted = data.copyOfRange(12, data.size)
-            val masterKey = app.encryptionManager.getMasterKeyForSession() ?: return null
-            val plaintext = app.fileEncryptor.decryptBytes(encrypted, masterKey, iv)
-            BitmapFactory.decodeByteArray(plaintext, 0, plaintext.size)?.asImageBitmap()
+            val bytes = FileInputStream(file).use { input ->
+                DataInputStream(input).use { dis ->
+                    val iv = ByteArray(12)
+                    dis.readFully(iv)
+                    val encrypted = dis.readBytes()
+                    val masterKey = app.encryptionManager.getMasterKeyForSession()
+                        ?: return null
+                    app.fileEncryptor.decryptBytes(encrypted, masterKey, iv)
+                }
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         } catch (e: Exception) {
             null
         }

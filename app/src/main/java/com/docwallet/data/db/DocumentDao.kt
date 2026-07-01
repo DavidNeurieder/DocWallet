@@ -1,6 +1,8 @@
 package com.docwallet.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.PrimaryKey
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -8,8 +10,31 @@ import androidx.room.Update
 import com.docwallet.data.model.Document
 import kotlinx.coroutines.flow.Flow
 
+data class DocumentListItem(
+    @PrimaryKey val id: String,
+    val title: String = "",
+    @ColumnInfo(name = "file_name") val fileName: String = "",
+    @ColumnInfo(name = "mime_type") val mimeType: String = "",
+    @ColumnInfo(name = "file_size") val fileSize: Long = 0,
+    @ColumnInfo(name = "page_count") val pageCount: Int = 0,
+    val author: String = "",
+    val description: String = "",
+    @ColumnInfo(name = "thumbnail_path") val thumbnailPath: String? = null,
+    @ColumnInfo(name = "imported_at") val importedAt: Long = 0,
+    @ColumnInfo(name = "last_opened_at") val lastOpenedAt: Long = 0,
+    @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
+    @ColumnInfo(name = "collection_id") val collectionId: String? = null,
+    @ColumnInfo(name = "barcode_format") val barcodeFormat: String? = null,
+    @ColumnInfo(name = "barcode_value") val barcodeValue: String? = null,
+    @ColumnInfo(name = "current_page") val currentPage: Int = 0,
+    @ColumnInfo(name = "reading_position") val readingPosition: String? = null,
+)
+
 @Dao
 interface DocumentDao {
+    @Query("SELECT id, title, file_name, mime_type, file_size, page_count, author, description, thumbnail_path, imported_at, last_opened_at, is_favorite, collection_id, barcode_format, barcode_value, current_page, reading_position FROM documents ORDER BY imported_at DESC")
+    fun getDocumentList(): Flow<List<DocumentListItem>>
+
     @Query("SELECT * FROM documents ORDER BY imported_at DESC")
     fun getAllDocuments(): Flow<List<Document>>
 

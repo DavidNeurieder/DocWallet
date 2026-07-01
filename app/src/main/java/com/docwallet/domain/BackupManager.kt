@@ -187,7 +187,9 @@ class BackupManager(
         try {
             val tempFile = File(context.cacheDir, "backup_import_${System.currentTimeMillis()}.backup")
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                tempFile.outputStream().use { it.write(inputStream.readBytes()) }
+                tempFile.outputStream().use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
             } ?: return@withContext false
             val success = importBackup(tempFile, currentPassword)
             tempFile.delete()

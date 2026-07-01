@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentDao
+import com.docwallet.data.db.DocumentListItem
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -32,7 +33,7 @@ class LibraryScreenTest {
     @Before
     fun setUp() {
         every { mockApp.documentDao } returns mockDao
-        every { mockDao.getAllDocuments() } returns flowOf(emptyList())
+        every { mockDao.getDocumentList() } returns flowOf(emptyList())
         viewModel = LibraryViewModel(mockApp)
     }
 

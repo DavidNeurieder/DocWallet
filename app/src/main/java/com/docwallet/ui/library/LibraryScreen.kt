@@ -441,9 +441,6 @@ fun LibraryScreen(
                         }
                     }
                     items(documents, key = { it.id }) { document ->
-                        LaunchedEffect(document.id, document.thumbnailPath) {
-                            document.thumbnailPath?.let { viewModel.loadThumbnail(document.id, it) }
-                        }
                         DocumentCard(
                             document = document,
                             onClick = { onDocumentClick(document.id) },
@@ -458,6 +455,12 @@ fun LibraryScreen(
                     }
                 }
             }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        documents.forEach { document ->
+            document.thumbnailPath?.let { viewModel.loadThumbnail(document.id, it) }
         }
     }
 
