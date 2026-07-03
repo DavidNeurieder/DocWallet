@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,10 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
@@ -61,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -90,7 +85,6 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = viewModel(),
 ) {
     val documents by viewModel.documents.collectAsState()
-    val continueReading by viewModel.continueReading.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedSort by viewModel.selectedSort.collectAsState()
@@ -374,33 +368,6 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (continueReading.isNotEmpty()) {
-                        item {
-                            Column {
-                                Text(
-                                    text = "Continue reading",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(bottom = 4.dp),
-                                )
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    items(continueReading, key = { it.id }) { doc ->
-                                        ContinueReadingCard(
-                                            document = doc,
-                                            onClick = { onDocumentClick(doc.id) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            Spacer(Modifier.height(4.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(4.dp))
-                        }
-                    }
                     items(documents, key = { it.id }) { document ->
                         DocumentCard(
                             document = document,
@@ -425,52 +392,6 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun ContinueReadingCard(
-    document: com.docwallet.data.model.Document,
-    onClick: () -> Unit,
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.width(160.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-        ) {
-            DocumentTypeIcon(
-                type = com.docwallet.data.model.DocumentType.fromMimeType(document.mimeType),
-                modifier = Modifier.size(32.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Column(modifier = Modifier.clearAndSetSemantics { }) {
-                Text(
-                    text = document.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-                if (document.currentPage > 0 && document.pageCount > 0) {
-                    Text(
-                        text = "Page ${document.currentPage + 1} of ${document.pageCount}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                } else {
-                    Text(
-                        text = "Opened ${formatRelativeTime(document.lastOpenedAt)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
-}
 
 private fun formatRelativeTime(timestamp: Long): String {
     val diff = System.currentTimeMillis() - timestamp

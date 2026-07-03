@@ -29,6 +29,7 @@ import java.io.FileInputStream
 enum class SortOption(val label: String) {
     NAME_ASC("Name A-Z"),
     NAME_DESC("Name Z-A"),
+    RECENTLY_OPENED("Recently opened"),
     DATE_NEWEST("Newest first"),
     DATE_OLDEST("Oldest first"),
     SIZE_LARGEST("Largest first"),
@@ -43,13 +44,9 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     val searchQuery = MutableStateFlow("")
-    val selectedSort = MutableStateFlow(SortOption.DATE_NEWEST)
+    val selectedSort = MutableStateFlow(SortOption.RECENTLY_OPENED)
     val filterType = MutableStateFlow<DocumentType?>(null)
     val favoritesOnly = MutableStateFlow(false)
-
-    val continueReading: StateFlow<List<Document>> = documentDao.getRecentDocuments(
-        System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000 // last 7 days
-    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val documents: StateFlow<List<Document>> = combine(
         documentDao.getDocumentList(),
@@ -105,6 +102,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             SortOption.DATE_OLDEST -> result.sortedBy { it.importedAt }
             SortOption.SIZE_LARGEST -> result.sortedByDescending { it.fileSize }
             SortOption.TYPE -> result.sortedBy { it.mimeType }
+            SortOption.RECENTLY_OPENED -> result.sortedByDescending { it.lastOpenedAt }
         }
 
         result

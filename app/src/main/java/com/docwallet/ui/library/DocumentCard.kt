@@ -113,7 +113,22 @@ fun DocumentCard(
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                RelativeTimestamp(timestamp = document.importedAt)
+                if (document.lastOpenedAt > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Opened ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        RelativeTimestamp(timestamp = document.lastOpenedAt)
+                    }
+                } else {
+                    Text(
+                        text = "Not yet opened",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             IconButton(onClick = onFavoriteClick) {
