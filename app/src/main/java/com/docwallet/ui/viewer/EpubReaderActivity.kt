@@ -2,7 +2,6 @@ package com.docwallet.ui.viewer
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 
@@ -34,8 +33,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -78,8 +75,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.lifecycle.lifecycleScope
@@ -342,7 +337,6 @@ private fun EpubReaderScreen(
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
-    var isFullscreen by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -351,26 +345,6 @@ private fun EpubReaderScreen(
 
     val activity = LocalContext.current as? FragmentActivity
     val scope = rememberCoroutineScope()
-
-    fun toggleFullscreen() {
-        isFullscreen = !isFullscreen
-        val window = (activity ?: return).window
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        if (isFullscreen) {
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
-            }
-        } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-            }
-        }
-    }
 
     fun navigateForward() {
         (activity?.supportFragmentManager?.findFragmentById(containerId) as? EpubNavigatorFragment)?.goForward(true)
@@ -468,67 +442,59 @@ private fun EpubReaderScreen(
 
     Scaffold(
         topBar = {
-            if (!isFullscreen) {
-                TopAppBar(
-                    title = {},
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                        )
+                    }
+                },
+                actions = {
+                    if (document != null) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Delete document",
                             )
                         }
-                    },
-                    actions = {
-                        if (document != null) {
-                            IconButton(onClick = { showDeleteDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete document",
-                                )
-                            }
-                            IconButton(onClick = {
-                                isFavorite = !isFavorite
-                                onToggleFavorite()
-                            }) {
-                                Icon(
-                                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                                    tint = if (isFavorite) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            IconButton(onClick = { showTocSheet = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.List,
-                                    contentDescription = "Table of Contents",
-                                )
-                            }
-                            IconButton(onClick = { showInfoDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Info,
-                                    contentDescription = "More options",
-                                )
-                            }
-                            IconButton(onClick = { showSettingsDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Settings,
-                                    contentDescription = "Reader settings",
-                                )
-                            }
-                            IconButton(onClick = { toggleFullscreen() }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Fullscreen,
-                                    contentDescription = "Enter fullscreen",
-                                )
-                            }
+                        IconButton(onClick = {
+                            isFavorite = !isFavorite
+                            onToggleFavorite()
+                        }) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                                tint = if (isFavorite) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                )
-            }
+                        IconButton(onClick = { showTocSheet = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.List,
+                                contentDescription = "Table of Contents",
+                            )
+                        }
+                        IconButton(onClick = { showInfoDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Info,
+                                contentDescription = "More options",
+                            )
+                        }
+                        IconButton(onClick = { showSettingsDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Reader settings",
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
         },
     ) { paddingValues ->
         Box(
@@ -583,17 +549,6 @@ private fun EpubReaderScreen(
                     },
                 )
 
-                if (isFullscreen) {
-                    IconButton(
-                        onClick = { toggleFullscreen() },
-                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.FullscreenExit,
-                            contentDescription = "Exit fullscreen",
-                        )
-                    }
-                }
             }
         }
     }

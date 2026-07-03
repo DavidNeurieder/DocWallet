@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Edit
@@ -42,9 +41,6 @@ import com.docwallet.data.PdfPreferencesStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import android.app.Activity
-import android.os.Build
-import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -57,8 +53,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.docwallet.data.model.DocumentType
 import com.docwallet.ui.common.EmptyState
@@ -82,31 +76,8 @@ fun ViewerScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     var showPdfSettingsDialog by remember { mutableStateOf(false) }
-    var isFullscreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val pdfPreferences = remember { mutableStateOf(PdfPreferencesStore.load(context)) }
-
-    val activity = LocalContext.current as? Activity
-
-    fun toggleFullscreen() {
-        isFullscreen = !isFullscreen
-        val window = activity?.window ?: return
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        if (isFullscreen) {
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
-            }
-        } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-            }
-        }
-    }
 
     if (showInfoDialog && document != null) {
         val doc = document!!
@@ -292,70 +263,62 @@ fun ViewerScreen(
 
     Scaffold(
         topBar = {
-            if (!isFullscreen) {
-                TopAppBar(
-                    title = {},
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                        )
+                    }
+                },
+                actions = {
+                    if (document != null) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Delete document",
                             )
                         }
-                    },
-                    actions = {
-                        if (document != null) {
-                            IconButton(onClick = { showDeleteDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete document",
-                                )
-                            }
-                            IconButton(onClick = { viewModel.toggleFavorite() }) {
-                                Icon(
-                                    imageVector = if (document!!.isFavorite)
-                                        Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    contentDescription = if (document!!.isFavorite)
-                                        "Remove from favorites" else "Add to favorites",
-                                    tint = if (document!!.isFavorite)
-                                        MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            IconButton(onClick = { showPdfSettingsDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Settings,
-                                    contentDescription = "PDF settings",
-                                )
-                            }
-                            IconButton(onClick = { showInfoDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Info,
-                                    contentDescription = "More options",
-                                )
-                            }
-                            IconButton(onClick = {
-                                renameText = document!!.title
-                                showRenameDialog = true
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Edit,
-                                    contentDescription = "Rename",
-                                )
-                            }
-                            IconButton(onClick = { toggleFullscreen() }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Fullscreen,
-                                    contentDescription = "Enter fullscreen",
-                                )
-                            }
+                        IconButton(onClick = { viewModel.toggleFavorite() }) {
+                            Icon(
+                                imageVector = if (document!!.isFavorite)
+                                    Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (document!!.isFavorite)
+                                    "Remove from favorites" else "Add to favorites",
+                                tint = if (document!!.isFavorite)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                )
-            }
+                        IconButton(onClick = { showPdfSettingsDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "PDF settings",
+                            )
+                        }
+                        IconButton(onClick = { showInfoDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Info,
+                                contentDescription = "More options",
+                            )
+                        }
+                        IconButton(onClick = {
+                            renameText = document!!.title
+                            showRenameDialog = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = "Rename",
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
         },
     ) { paddingValues ->
         Box(
@@ -388,8 +351,6 @@ fun ViewerScreen(
                             document = doc,
                             initialPage = doc.currentPage,
                             onPageChanged = viewModel::saveReadingPosition,
-                            onToggleFullscreen = ::toggleFullscreen,
-                            isFullscreen = isFullscreen,
                             pdfPreferences = pdfPreferences.value,
                         )
                         DocumentType.EPUB -> {

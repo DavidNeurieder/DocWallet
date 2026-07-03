@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -64,8 +63,6 @@ fun PdfViewer(
     document: DocWalletDocument,
     initialPage: Int = 0,
     onPageChanged: (Int) -> Unit = {},
-    onToggleFullscreen: () -> Unit = {},
-    isFullscreen: Boolean = false,
     pdfPreferences: PdfPreferences = PdfPreferences(),
 ) {
     var pageCount by remember { mutableIntStateOf(document.pageCount) }
@@ -154,11 +151,6 @@ fun PdfViewer(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = { onToggleFullscreen() },
-                )
-            }
-            .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
                     scale = (scale * zoom).coerceIn(0.5f, 5f)
                     offsetX += pan.x
@@ -214,15 +206,13 @@ fun PdfViewer(
             }
         }
 
-        if (!isFullscreen) {
-            Text(
-                text = "Page $currentPage of $pageCount",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-            )
-        }
+        Text(
+            text = "Page $currentPage of $pageCount",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp),
+        )
     }
 }
