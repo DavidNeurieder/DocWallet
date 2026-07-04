@@ -115,7 +115,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val password = currentPassword.value.takeIf { it.isNotBlank() }
             val success = withContext(Dispatchers.IO) {
-                app.backupManager.importBackupFromUri(uri, password)
+                val ok = app.backupManager.importBackupFromUri(uri, password)
+                if (ok) app.reopenDatabase()
+                ok
             }
             _message.value = if (success) "Backup imported successfully" else "Backup import failed"
         }

@@ -12,6 +12,9 @@ interface DocumentTagDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(documentTag: DocumentTag)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertOrIgnore(documentTag: DocumentTag)
+
     @Query("DELETE FROM document_tags WHERE document_id = :documentId AND tag_id = :tagId")
     suspend fun delete(documentId: String, tagId: String)
 

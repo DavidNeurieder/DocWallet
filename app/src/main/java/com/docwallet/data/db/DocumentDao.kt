@@ -44,6 +44,9 @@ interface DocumentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(document: Document)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertOrIgnore(document: Document)
+
     @Update
     suspend fun update(document: Document)
 

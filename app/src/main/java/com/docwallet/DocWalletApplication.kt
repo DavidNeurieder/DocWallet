@@ -18,15 +18,23 @@ class DocWalletApplication : Application() {
     lateinit var encryptionManager: EncryptionManager
         private set
 
-    private val database: DocWalletDatabase by lazy {
-        val passphrase = encryptionManager.getMasterKeyForSession()
-            ?: throw IllegalStateException("Master key not available for database access")
-        DocWalletDatabase.create(this, passphrase)
-    }
+    private var database: DocWalletDatabase? = null
+    private var _documentDao: DocumentDao? = null
+    private var _collectionDao: CollectionDao? = null
+    private var _tagDao: TagDao? = null
 
-    val documentDao: DocumentDao by lazy { database.documentDao() }
-    val collectionDao: CollectionDao by lazy { database.collectionDao() }
-    val tagDao: TagDao by lazy { database.tagDao() }
+    val documentDao: DocumentDao get() {
+        initializeDatabase()
+        return _documentDao ?: throw IllegalStateException("Database not available")
+    }
+    val collectionDao: CollectionDao get() {
+        initializeDatabase()
+        return _collectionDao ?: throw IllegalStateException("Database not available")
+    }
+    val tagDao: TagDao get() {
+        initializeDatabase()
+        return _tagDao ?: throw IllegalStateException("Database not available")
+    }
 
     val fileEncryptor: FileEncryptor by lazy { FileEncryptor() }
 
@@ -35,7 +43,30 @@ class DocWalletApplication : Application() {
     }
 
     val backupManager: BackupManager by lazy {
-        BackupManager(this, encryptionManager)
+        BackupManager(this, encryptionManager, { database })
+    }
+
+    @Synchronized
+    private fun initializeDatabase(): Boolean {
+        if (database != null) return true
+        val passphrase = encryptionManager.getMasterKeyForSession()
+            ?: return false
+        val newDb = DocWalletDatabase.create(this, passphrase)
+        database = newDb
+        _documentDao = newDb.documentDao()
+        _collectionDao = newDb.collectionDao()
+        _tagDao = newDb.tagDao()
+        return true
+    }
+
+    @Synchronized
+    fun reopenDatabase() {
+        database?.close()
+        database = null
+        _documentDao = null
+        _collectionDao = null
+        _tagDao = null
+        initializeDatabase()
     }
 
     override fun onCreate() {
