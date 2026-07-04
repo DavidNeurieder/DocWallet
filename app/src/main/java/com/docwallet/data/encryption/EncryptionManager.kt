@@ -155,8 +155,9 @@ class EncryptionManager(
         }
     }
 
+    @Synchronized
     fun getMasterKeyForSession(): ByteArray? {
-        cachedMasterKey?.let { return it }
+        cachedMasterKey?.let { return it.copyOf() }
 
         if (encryptedDeviceKeyFile.exists()) {
             val data = encryptedDeviceKeyFile.readBytes()
@@ -172,7 +173,7 @@ class EncryptionManager(
             try {
                 val masterKey = unwrapKey(wrappedKey, deviceKey)
                 cachedMasterKey = masterKey
-                return masterKey
+                return masterKey.copyOf()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to unwrap with KeyStore-protected device key", e)
                 return null
@@ -186,7 +187,7 @@ class EncryptionManager(
                 val masterKey = unwrapKey(wrappedKey, deviceKey)
                 cachedMasterKey = masterKey
                 migrateDeviceKeyToKeyStore(deviceKey)
-                return masterKey
+                return masterKey.copyOf()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to unwrap with legacy device key", e)
                 return null
@@ -309,6 +310,7 @@ class EncryptionManager(
         }
     }
 
+    @Synchronized
     fun lock() {
         cachedMasterKey?.let { Arrays.fill(it, 0) }
         cachedMasterKey = null

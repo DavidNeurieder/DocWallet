@@ -136,8 +136,8 @@ class ViewerViewModelTest {
         advanceUntilIdle()
     }
 
-    @Test(expected = Exception::class)
-    fun `loadDocument throws when encryption IV is missing`() = runTest(testDispatcher) {
+    @Test
+    fun `loadDocument reports error when encryption IV is missing`() = runTest(testDispatcher) {
         val masterKey = createTestMasterKey()
         val content = "Some content".toByteArray()
         val encrypted = createEncryptedFile(content, masterKey)
@@ -156,6 +156,9 @@ class ViewerViewModelTest {
 
         viewModel.loadDocument("no-iv-id")
         advanceUntilIdle()
+
+        assertEquals("Document is corrupted or has no encryption data", viewModel.error.value)
+        assertNull(viewModel.decryptedFile.value)
     }
 
     @Test

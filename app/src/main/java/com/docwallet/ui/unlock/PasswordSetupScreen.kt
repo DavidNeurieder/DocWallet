@@ -44,6 +44,7 @@ import com.docwallet.data.encryption.EncryptionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PasswordSetupScreen(
@@ -189,7 +190,9 @@ fun PasswordSetupScreen(
                     showSkipDialog = false
                     scope.launch(kotlinx.coroutines.Dispatchers.Default) {
                         encryptionManager.initializeDeviceKeyMode()
-                        onComplete()
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onComplete()
+                        }
                     }
                 }) {
                     Text("Skip")
@@ -218,10 +221,13 @@ private fun doSetPassword(
         else -> {
             scope.launch(Dispatchers.Default) {
                 encryptionManager.initializeDeviceKeyMode()
-                if (encryptionManager.setPassword(password)) {
-                    onSuccess()
-                } else {
-                    onError("Failed to set password")
+                val success = encryptionManager.setPassword(password)
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        onSuccess()
+                    } else {
+                        onError("Failed to set password")
+                    }
                 }
             }
         }

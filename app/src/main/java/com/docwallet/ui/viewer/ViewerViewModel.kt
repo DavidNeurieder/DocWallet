@@ -93,9 +93,16 @@ class ViewerViewModel @JvmOverloads constructor(
                 if (tempFile.exists()) tempFile.delete()
                 tempFile.deleteOnExit()
                 val iv = doc.encryptionIv
-                    ?: throw IllegalArgumentException("Document has no encryption IV")
+                    ?: return@withContext null.also {
+                        Log.e("ViewerViewModel", "Document $documentId has no encryption IV")
+                    }
                 fileEncryptor.decrypt(encryptedFile, tempFile, masterKey, iv)
                 tempFile
+            }
+            if (decrypted == null) {
+                _error.value = "Document is corrupted or has no encryption data"
+                _isLoading.value = false
+                return@launch
             }
             _decryptedFile.value = decrypted
 
