@@ -24,6 +24,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val newPassword = MutableStateFlow("")
     val confirmPassword = MutableStateFlow("")
 
+    val exportBackupPassword = MutableStateFlow("")
+    val exportBackupPasswordConfirm = MutableStateFlow("")
+    val importBackupPassword = MutableStateFlow("")
+
+    val showExportPasswordDialog = MutableStateFlow(false)
+    val showImportPasswordDialog = MutableStateFlow(false)
+    val pendingImportUri = MutableStateFlow<Uri?>(null)
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -102,25 +110,68 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _message.value = null
     }
 
-    fun exportBackup(uri: Uri) {
+    fun onExportConfirmed(uri: Uri) {
+        val password = exportBackupPassword.value
+        val confirm = exportBackupPasswordConfirm.value
+
+        when {
+            password.length < 6 -> {
+                _message.value = "Backup password must be at least 6 characters"
+                return
+            }
+            password != confirm -> {
+                _message.value = "Backup passwords do not match"
+                return
+            }
+        }
+
         viewModelScope.launch {
             val success = withContext(Dispatchers.IO) {
-                app.backupManager.exportBackupToUri(uri)
+                app.backupManager.exportBackupToUri(uri, password)
+            }
+            if (success) {
+                exportBackupPassword.value = ""
+                exportBackupPasswordConfirm.value = ""
             }
             _message.value = if (success) "Backup exported successfully" else "Backup export failed"
         }
+        showExportPasswordDialog.value = false
     }
 
-    fun importBackup(uri: Uri) {
+    fun onImportConfirmed() {
+        val password = importBackupPassword.value
+        val uri = pendingImportUri.value ?: return
+
+        if (password.isBlank()) {
+            _message.value = "Enter the backup password"
+            return
+        }
+
         viewModelScope.launch {
-            val password = currentPassword.value.takeIf { it.isNotBlank() }
             val success = withContext(Dispatchers.IO) {
                 val ok = app.backupManager.importBackupFromUri(uri, password)
                 if (ok) app.reopenDatabase()
                 ok
             }
+            if (success) {
+                importBackupPassword.value = ""
+                pendingImportUri.value = null
+            }
             _message.value = if (success) "Backup imported successfully" else "Backup import failed"
         }
+        showImportPasswordDialog.value = false
+    }
+
+    fun cancelExport() {
+        showExportPasswordDialog.value = false
+        exportBackupPassword.value = ""
+        exportBackupPasswordConfirm.value = ""
+    }
+
+    fun cancelImport() {
+        showImportPasswordDialog.value = false
+        importBackupPassword.value = ""
+        pendingImportUri.value = null
     }
 
     private fun clearFields() {

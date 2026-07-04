@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -52,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -71,6 +73,11 @@ fun SettingsScreen(
     val newPassword by viewModel.newPassword.collectAsState()
     val confirmPassword by viewModel.confirmPassword.collectAsState()
     val message by viewModel.message.collectAsState()
+    val exportBackupPassword by viewModel.exportBackupPassword.collectAsState()
+    val exportBackupPasswordConfirm by viewModel.exportBackupPasswordConfirm.collectAsState()
+    val importBackupPassword by viewModel.importBackupPassword.collectAsState()
+    val showExportPasswordDialog by viewModel.showExportPasswordDialog.collectAsState()
+    val showImportPasswordDialog by viewModel.showImportPasswordDialog.collectAsState()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -79,13 +86,16 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
-        uri?.let { viewModel.exportBackup(it) }
+        uri?.let { viewModel.onExportConfirmed(it) }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        uri?.let { viewModel.importBackup(it) }
+        uri?.let {
+            viewModel.pendingImportUri.value = it
+            viewModel.showImportPasswordDialog.value = true
+        }
     }
 
     LaunchedEffect(message) {
@@ -93,6 +103,122 @@ fun SettingsScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    // Export password dialog
+    if (showExportPasswordDialog) {
+        var exportPasswordVisible by remember { mutableStateOf(false) }
+        var exportConfirmVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelExport() },
+            title = { Text("Encrypt Backup") },
+            text = {
+                Column {
+                    Text(
+                        text = "Set a password to encrypt this backup. You will need it to restore.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = exportBackupPassword,
+                        onValueChange = { viewModel.exportBackupPassword.value = it },
+                        label = { Text("Backup password") },
+                        singleLine = true,
+                        visualTransformation = if (exportPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { exportPasswordVisible = !exportPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (exportPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (exportPasswordVisible) "Hide" else "Show",
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = exportBackupPasswordConfirm,
+                        onValueChange = { viewModel.exportBackupPasswordConfirm.value = it },
+                        label = { Text("Confirm password") },
+                        singleLine = true,
+                        visualTransformation = if (exportConfirmVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { exportConfirmVisible = !exportConfirmVisible }) {
+                                Icon(
+                                    imageVector = if (exportConfirmVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (exportConfirmVisible) "Hide" else "Show",
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val dateStr = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                    exportLauncher.launch("DocWallet-$dateStr.docwallet-backup")
+                }) {
+                    Text("Export")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelExport() }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Import password dialog
+    if (showImportPasswordDialog) {
+        var importPasswordVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelImport() },
+            title = { Text("Decrypt Backup") },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter the password that was used to encrypt this backup.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = importBackupPassword,
+                        onValueChange = { viewModel.importBackupPassword.value = it },
+                        label = { Text("Backup password") },
+                        singleLine = true,
+                        visualTransformation = if (importPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { importPasswordVisible = !importPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (importPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (importPasswordVisible) "Hide" else "Show",
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.onImportConfirmed() }) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelImport() }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -311,8 +437,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     OutlinedButton(
                         onClick = {
-                            val dateStr = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-                            exportLauncher.launch("DocWallet-$dateStr.docwallet-backup")
+                            viewModel.showExportPasswordDialog.value = true
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {

@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.docwallet.data.db.DocWalletDatabase
+import com.docwallet.data.encryption.Argon2HasherImpl
 import com.docwallet.data.encryption.EncryptionManager
+import com.docwallet.data.encryption.FileEncryptor
 import com.docwallet.data.model.Collection
 import com.docwallet.data.model.Document
 import com.docwallet.data.model.DocumentTag
@@ -12,9 +14,11 @@ import com.docwallet.data.model.Tag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.sqlcipher.database.SQLiteDatabase
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.security.SecureRandom
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -25,7 +29,7 @@ class BackupManager(
     private val getDatabase: () -> DocWalletDatabase? = { null },
 ) {
 
-    suspend fun exportBackup(destination: File): Boolean {
+    suspend fun exportBackup(destination: File, backupPassword: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val tempDir = File(context.cacheDir, "backup_${System.currentTimeMillis()}")
@@ -33,10 +37,8 @@ class BackupManager(
 
                 val encryptionDir = File(context.filesDir, "encryption")
 
-                // wrapped_master_key — always copied as-is (AES-key-wrapped)
                 copyToDir(File(encryptionDir, "wrapped_master_key"), tempDir)
 
-                // device_key — may need to decrypt from KeyStore-wrapped form
                 val deviceKeyFile = File(encryptionDir, "device_key")
                 if (deviceKeyFile.exists()) {
                     deviceKeyFile.copyTo(File(tempDir, "device_key"), overwrite = true)
@@ -68,8 +70,8 @@ class BackupManager(
 
                 copyDirectory(context.filesDir, File(tempDir, "files"))
 
-                // Write plain ZIP directly to destination — no outer encryption.
-                ZipOutputStream(FileOutputStream(destination)).use { zos ->
+                val plainZip = File(context.cacheDir, "backup_plain_${System.currentTimeMillis()}.zip")
+                ZipOutputStream(FileOutputStream(plainZip)).use { zos ->
                     tempDir.walkTopDown().forEach { file ->
                         if (file.isFile) {
                             val entryName = file.relativeTo(tempDir).path
@@ -80,6 +82,18 @@ class BackupManager(
                     }
                 }
 
+                val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+                val hasher = Argon2HasherImpl()
+                val derivedKey = hasher.hash(
+                    backupPassword.toByteArray(), salt,
+                    tCostInIterations = 2, mCostInKibibyte = 19456,
+                    parallelism = 2, hashLengthInBytes = 32,
+                )
+
+                val (iv, ciphertext) = FileEncryptor().encryptBytes(plainZip.readBytes(), derivedKey)
+                destination.writeBytes(salt + iv + ciphertext)
+
+                plainZip.delete()
                 tempDir.deleteRecursively()
                 true
             } catch (e: Exception) {
@@ -89,20 +103,29 @@ class BackupManager(
         }
     }
 
-    suspend fun importBackup(source: File, currentPassword: String?): Boolean {
+    suspend fun importBackup(source: File, backupPassword: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                if (encryptionManager.isPasswordSet()) {
-                    if (currentPassword == null || !encryptionManager.verifyPassword(currentPassword)) {
-                        return@withContext false
-                    }
-                }
+                val encryptedBytes = source.readBytes()
+                val salt = encryptedBytes.copyOfRange(0, 16)
+                val iv = encryptedBytes.copyOfRange(16, 28)
+                val ciphertext = encryptedBytes.copyOfRange(28, encryptedBytes.size)
+
+                val hasher = Argon2HasherImpl()
+                val derivedKey = hasher.hash(
+                    backupPassword.toByteArray(), salt,
+                    tCostInIterations = 2, mCostInKibibyte = 19456,
+                    parallelism = 2, hashLengthInBytes = 32,
+                )
+
+                val plainZipBytes = FileEncryptor().decryptBytes(ciphertext, derivedKey, iv)
+                val plainZip = File(context.cacheDir, "restore_plain_${System.currentTimeMillis()}.zip")
+                plainZip.writeBytes(plainZipBytes)
 
                 val tempDir = File(context.cacheDir, "restore_${System.currentTimeMillis()}")
                 tempDir.mkdirs()
 
-                // Open the plain ZIP directly — no GCM decryption.
-                ZipInputStream(FileInputStream(source)).use { zis ->
+                ZipInputStream(FileInputStream(plainZip)).use { zis ->
                     var entry = zis.nextEntry
                     while (entry != null) {
                         val outputFile = File(tempDir, entry.name)
@@ -304,10 +327,10 @@ class BackupManager(
         }
     }
 
-    suspend fun exportBackupToUri(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+    suspend fun exportBackupToUri(uri: Uri, backupPassword: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val tempFile = File(context.cacheDir, "backup_export_${System.currentTimeMillis()}.backup")
-            val success = exportBackup(tempFile)
+            val success = exportBackup(tempFile, backupPassword)
             if (!success) return@withContext false
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                 tempFile.inputStream().use { it.copyTo(outputStream) }
@@ -320,7 +343,7 @@ class BackupManager(
         }
     }
 
-    suspend fun importBackupFromUri(uri: Uri, currentPassword: String? = null): Boolean = withContext(Dispatchers.IO) {
+    suspend fun importBackupFromUri(uri: Uri, backupPassword: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val tempFile = File(context.cacheDir, "backup_import_${System.currentTimeMillis()}.backup")
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
@@ -328,7 +351,7 @@ class BackupManager(
                     inputStream.copyTo(outputStream)
                 }
             } ?: return@withContext false
-            val success = importBackup(tempFile, currentPassword)
+            val success = importBackup(tempFile, backupPassword)
             tempFile.delete()
             success
         } catch (e: Exception) {

@@ -36,6 +36,10 @@ class BackupManagerTest {
     private lateinit var dao: com.docwallet.data.db.DocumentDao
     private lateinit var masterKey: ByteArray
 
+    companion object {
+        private const val BACKUP_PW = "test-backup-password"
+    }
+
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
@@ -80,6 +84,7 @@ class BackupManagerTest {
         File(context.cacheDir, "verify_doc2.txt").delete()
         File(context.cacheDir, "src_ri1.txt").delete()
         File(context.cacheDir, "verify_ri1.txt").delete()
+        File(context.cacheDir, "src_wp.txt").delete()
     }
 
     @Suppress("BlockingMethodInNonBlockingContext")
@@ -125,7 +130,7 @@ class BackupManagerTest {
         assertTrue(doc2File.exists())
 
         val backupFile = File(context.cacheDir, "test_backup.backup")
-        val exported = backupManager.exportBackup(backupFile)
+        val exported = backupManager.exportBackup(backupFile, BACKUP_PW)
         assertTrue("Backup export should succeed", exported)
         assertTrue("Backup file should exist", backupFile.exists())
         assertTrue("Backup file should have content", backupFile.length() > 0)
@@ -140,7 +145,7 @@ class BackupManagerTest {
         assertFalse(doc1File.exists())
         assertFalse(doc2File.exists())
 
-        val imported = backupManager.importBackup(backupFile, currentPassword = null)
+        val imported = backupManager.importBackup(backupFile, BACKUP_PW)
         assertTrue("Backup import should succeed", imported)
 
         val restoredDocs = dao.getAllDocuments().first()
@@ -197,7 +202,7 @@ class BackupManagerTest {
         assertEquals(1, dao.getAllDocuments().first().size)
 
         val backupFile = File(context.cacheDir, "test_backup.backup")
-        assertTrue(backupManager.exportBackup(backupFile))
+        assertTrue(backupManager.exportBackup(backupFile, BACKUP_PW))
         assertTrue(backupFile.exists())
 
         db.close()
@@ -219,7 +224,7 @@ class BackupManagerTest {
 
         // Import with a fresh BackupManager that has no database reference.
         val freshBackupManager = BackupManager(context, encryptionManager) { null }
-        assertTrue("Backup import should succeed on fresh install", freshBackupManager.importBackup(backupFile, currentPassword = null))
+        assertTrue("Backup import should succeed on fresh install", freshBackupManager.importBackup(backupFile, BACKUP_PW))
 
         // Key files should be restored from the backup.
         val encryptionDir = File(context.filesDir, "encryption")
@@ -247,6 +252,37 @@ class BackupManagerTest {
 
     @Suppress("BlockingMethodInNonBlockingContext")
     @Test
+    fun exportWithWrongPasswordFails() = runTest {
+        val filesDir = File(context.filesDir, "files").also { it.mkdirs() }
+
+        val docContent = "Wrong password test".toByteArray()
+        val docFile = File(filesDir, "wp.enc")
+        val docSrc = File(context.cacheDir, "src_wp.txt").apply { writeBytes(docContent) }
+        val docIv = fileEncryptor.encrypt(docSrc, docFile, masterKey)
+        docSrc.delete()
+
+        val doc = Document(
+            id = "wp-doc-1",
+            title = "Wrong Password Doc",
+            fileName = "wp.txt",
+            mimeType = "text/plain",
+            filePath = docFile.absolutePath,
+            fileSize = docContent.size.toLong(),
+            encryptionIv = docIv,
+        )
+        dao.insert(doc)
+        assertEquals(1, dao.getAllDocuments().first().size)
+
+        val backupFile = File(context.cacheDir, "test_backup.backup")
+        assertTrue(backupManager.exportBackup(backupFile, BACKUP_PW))
+
+        // Try importing with the wrong password.
+        val result = backupManager.importBackup(backupFile, "wrong-password-123")
+        assertFalse("Import with wrong password should fail", result)
+    }
+
+    @Suppress("BlockingMethodInNonBlockingContext")
+    @Test
     fun backupAfterUninstallReinstall() = runTest {
         val filesDir = File(context.filesDir, "files").also { it.mkdirs() }
 
@@ -270,7 +306,7 @@ class BackupManagerTest {
         assertEquals(1, dao.getAllDocuments().first().size)
 
         val backupFile = File(context.cacheDir, "test_backup.backup")
-        assertTrue(backupManager.exportBackup(backupFile))
+        assertTrue(backupManager.exportBackup(backupFile, BACKUP_PW))
         db.close()
 
         // --- Uninstall: wipe everything ---
@@ -289,7 +325,7 @@ class BackupManagerTest {
         assertTrue("Should be first launch after reinstall", freshEm.isFirstLaunch())
 
         val freshBm = BackupManager(context, freshEm) { null }
-        assertTrue("Import should succeed after reinstall", freshBm.importBackup(backupFile, currentPassword = null))
+        assertTrue("Import should succeed after reinstall", freshBm.importBackup(backupFile, BACKUP_PW))
 
         // Keys restored from the backup — master key is recoverable via the
         // plaintext device_key path (encrypted_device_key from the old KeyStore
