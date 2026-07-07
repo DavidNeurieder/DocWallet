@@ -5,4 +5,10 @@ interface KeyManager {
     fun lock()
     fun isPasswordSet(): Boolean
     fun isFirstLaunch(): Boolean
+
+    fun initializeDeviceKeyMode()
+    fun setPassword(password: String): Boolean
+    fun verifyPassword(password: String): Boolean
+    fun changePassword(oldPassword: String, newPassword: String): Boolean
+    fun disablePassword(): Boolean
 }

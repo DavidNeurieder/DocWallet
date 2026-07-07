@@ -12,6 +12,11 @@
 app/build/
 vault-core/build/
 
+# Test reports
+app/build/reports/
+vault-core/build/reports/
+*.test-results/
+
 # Signing keys (never commit these)
 *.jks
 *.keystore

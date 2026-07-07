@@ -5,20 +5,16 @@ import android.net.Uri
 import android.util.Log
 import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.vault.crypto.Argon2HasherImpl
 import com.docwallet.vault.crypto.FileEncryptor
-import com.docwallet.data.model.Collection
-import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentTag
-import com.docwallet.data.model.Tag
+import com.docwallet.vault.crypto.KdfParams
+import com.docwallet.vault.crypto.KeyDerivation
+import com.docwallet.vault.format.VaultManifest
+import com.docwallet.vault.format.VaultPackage
+import com.docwallet.vault.format.VaultPackageData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import net.sqlcipher.database.SQLiteDatabase
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.security.SecureRandom
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -28,34 +24,28 @@ class BackupManager(
     private val encryptionManager: EncryptionManager,
     private val getDatabase: () -> DocWalletDatabase? = { null },
 ) {
+    private val keyDerivation = KeyDerivation()
+    private val kdfParams = KdfParams()
+    private val databaseMerger = DatabaseMerger(getDatabase)
 
     suspend fun exportBackup(destination: File, backupPassword: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val tempDir = File(context.cacheDir, "backup_${System.currentTimeMillis()}")
-                tempDir.mkdirs()
-
                 val encryptionDir = File(context.filesDir, "encryption")
+                val zipEntries = mutableMapOf<String, ByteArray>()
 
-                copyToDir(File(encryptionDir, "wrapped_master_key"), tempDir)
+                val wrappedKey = File(encryptionDir, "wrapped_master_key")
+                if (wrappedKey.exists()) {
+                    zipEntries["keys/wrapped_master_key"] = wrappedKey.readBytes()
+                }
 
-                val deviceKeyFile = File(encryptionDir, "device_key")
-                if (deviceKeyFile.exists()) {
-                    deviceKeyFile.copyTo(File(tempDir, "device_key"), overwrite = true)
-                } else {
-                    val encryptedKeyFile = File(encryptionDir, "encrypted_device_key")
-                    if (encryptedKeyFile.exists()) {
-                        val data = encryptedKeyFile.readBytes()
-                        val iv = data.copyOfRange(0, 12)
-                        val ciphertext = data.copyOfRange(12, data.size)
-                        val deviceKey = encryptionManager.keyStoreCryptographer.decrypt(iv, ciphertext)
-                        File(tempDir, "device_key").writeBytes(deviceKey)
-                    }
+                encryptionManager.resolveDeviceKeyForBackup()?.let { deviceKey ->
+                    zipEntries["keys/device_key"] = deviceKey
                 }
 
                 val saltFile = File(encryptionDir, "salt")
                 if (saltFile.exists()) {
-                    saltFile.copyTo(File(tempDir, "salt"), overwrite = true)
+                    zipEntries["keys/salt"] = saltFile.readBytes()
                 }
 
                 val dbFile = context.getDatabasePath("docwallet.db")
@@ -65,39 +55,48 @@ class BackupManager(
                             cursor.moveToFirst()
                         }
                     }
-                    dbFile.copyTo(File(tempDir, "docwallet.db"), overwrite = true)
+                    zipEntries["db/docwallet.db"] = dbFile.readBytes()
                 }
 
-                copyDirectory(context.filesDir, File(tempDir, "files"))
-
-                val plainZip = File(context.cacheDir, "backup_plain_${System.currentTimeMillis()}.zip")
-                ZipOutputStream(FileOutputStream(plainZip)).use { zos ->
-                    tempDir.walkTopDown().forEach { file ->
+                val filesDir = File(context.filesDir, "files")
+                if (filesDir.exists()) {
+                    filesDir.walkTopDown().forEach { file ->
                         if (file.isFile) {
-                            val entryName = file.relativeTo(tempDir).path
-                            zos.putNextEntry(ZipEntry(entryName))
-                            file.inputStream().use { it.copyTo(zos) }
-                            zos.closeEntry()
+                            val entryName = "files/${file.relativeTo(filesDir).path}"
+                            zipEntries[entryName] = file.readBytes()
                         }
                     }
                 }
 
-                val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-                val hasher = Argon2HasherImpl()
-                val derivedKey = hasher.hash(
-                    backupPassword.toByteArray(), salt,
-                    tCostInIterations = 2, mCostInKibibyte = 19456,
-                    parallelism = 2, hashLengthInBytes = 32,
-                )
+                val salt = keyDerivation.generateSalt()
+                val derivedKey = keyDerivation.deriveAndZero(backupPassword, salt, kdfParams)
 
-                val (iv, ciphertext) = FileEncryptor().encryptBytes(plainZip.readBytes(), derivedKey)
-                destination.writeBytes(salt + iv + ciphertext)
+                try {
+                    val plainZip = VaultPackage.createZipBlob(zipEntries)
+                    val (iv, ciphertext) = FileEncryptor().encryptBytes(plainZip, derivedKey)
+                    val encryptedBlob = iv + ciphertext
 
-                plainZip.delete()
-                tempDir.deleteRecursively()
-                true
+                    val documentCount = zipEntries.keys.count { it.startsWith("files/") && it != "files/" }
+                    val manifest = VaultManifest(
+                        version = 1,
+                        kdf = "argon2id",
+                        salt = java.util.Base64.getEncoder().encodeToString(salt),
+                        argon2Memory = kdfParams.memoryCost,
+                        argon2Iterations = kdfParams.iterations,
+                        argon2Parallelism = kdfParams.parallelism,
+                        documentCount = documentCount,
+                    )
+
+                    val vaultBytes = VaultPackage.write(manifest, encryptedBlob)
+                    destination.writeBytes(vaultBytes)
+
+                    Log.d(TAG, "Export complete: ${vaultBytes.size} bytes, $documentCount documents")
+                    true
+                } finally {
+                    java.util.Arrays.fill(derivedKey, 0)
+                }
             } catch (e: Exception) {
-                Log.e("BackupManager", "exportBackup failed", e)
+                Log.e(TAG, "exportBackup failed", e)
                 false
             }
         }
@@ -106,181 +105,185 @@ class BackupManager(
     suspend fun importBackup(source: File, backupPassword: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val encryptedBytes = source.readBytes()
-                val salt = encryptedBytes.copyOfRange(0, 16)
-                val iv = encryptedBytes.copyOfRange(16, 28)
-                val ciphertext = encryptedBytes.copyOfRange(28, encryptedBytes.size)
+                val vaultData: VaultPackageData = try {
+                    VaultPackage.read(source.readBytes())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to read vault package, trying legacy format", e)
+                    return@withContext importLegacyBackup(source, backupPassword)
+                }
 
-                val hasher = Argon2HasherImpl()
-                val derivedKey = hasher.hash(
-                    backupPassword.toByteArray(), salt,
-                    tCostInIterations = 2, mCostInKibibyte = 19456,
-                    parallelism = 2, hashLengthInBytes = 32,
+                val manifest = vaultData.manifest
+                val saltBytes = try {
+                    java.util.Base64.getDecoder().decode(manifest.salt)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Invalid salt in manifest", e)
+                    return@withContext false
+                }
+
+                val importKdfParams = KdfParams(
+                    memoryCost = manifest.argon2Memory,
+                    iterations = manifest.argon2Iterations,
+                    parallelism = manifest.argon2Parallelism,
                 )
+                val derivedKey = keyDerivation.deriveAndZero(backupPassword, saltBytes, importKdfParams)
 
-                val plainZipBytes = FileEncryptor().decryptBytes(ciphertext, derivedKey, iv)
-                val plainZip = File(context.cacheDir, "restore_plain_${System.currentTimeMillis()}.zip")
-                plainZip.writeBytes(plainZipBytes)
+                try {
+                    val encryptedBlob = vaultData.encryptedBlob
+                    val iv = encryptedBlob.copyOfRange(0, 12)
+                    val ciphertext = encryptedBlob.copyOfRange(12, encryptedBlob.size)
+                    val plainZipBytes = FileEncryptor().decryptBytes(ciphertext, derivedKey, iv)
 
-                val tempDir = File(context.cacheDir, "restore_${System.currentTimeMillis()}")
-                tempDir.mkdirs()
+                    val entries = VaultPackage.readZipBlob(plainZipBytes)
+                    restoreEntries(entries)
 
-                ZipInputStream(FileInputStream(plainZip)).use { zis ->
-                    var entry = zis.nextEntry
-                    while (entry != null) {
-                        val outputFile = File(tempDir, entry.name)
-                        if (entry.isDirectory) {
-                            outputFile.mkdirs()
-                        } else {
-                            outputFile.parentFile?.mkdirs()
-                            FileOutputStream(outputFile).use { fos ->
-                                zis.copyTo(fos)
-                            }
-                        }
-                        zis.closeEntry()
-                        entry = zis.nextEntry
-                    }
+                    Log.d(TAG, "Import complete from vault format")
+                    true
+                } finally {
+                    java.util.Arrays.fill(derivedKey, 0)
                 }
-
-                var masterKey = encryptionManager.getMasterKeyForSession()
-                if (masterKey == null) {
-                    // Fresh install — restore key files from the backup first.
-                    restoreKeyFiles(tempDir)
-                    masterKey = encryptionManager.getMasterKeyForSession()
-                }
-
-                masterKey ?: return@withContext false
-
-                val tempDb = File(tempDir, "docwallet.db")
-                if (tempDb.exists()) {
-                    val currentDb = getDatabase()
-                    if (currentDb != null) {
-                        // Existing install — merge records into the current database.
-                        mergeDatabase(tempDb, masterKey)
-                    } else {
-                        // Fresh install — no database exists yet. Copy the backup
-                        // database directly; keys have been restored so it will be
-                        // decryptable when the app opens it.
-                        val dbFile = context.getDatabasePath("docwallet.db")
-                        dbFile.parentFile?.mkdirs()
-                        tempDb.copyTo(dbFile, overwrite = true)
-                    }
-                }
-
-                val tempFiles = File(tempDir, "files")
-                if (tempFiles.exists()) {
-                    mergeFiles(tempFiles)
-                }
-
-                tempDir.deleteRecursively()
-                true
             } catch (e: Exception) {
-                Log.e("BackupManager", "importBackup failed", e)
+                Log.e(TAG, "importBackup failed", e)
                 false
             }
         }
     }
 
-    private fun restoreKeyFiles(tempDir: File) {
+    private suspend fun restoreEntries(entries: Map<String, ByteArray>) {
         val encryptionDir = File(context.filesDir, "encryption").also { it.mkdirs() }
-        copyFromDir(tempDir, "wrapped_master_key", encryptionDir)
-        // Only restore the plaintext device_key. On a cross-device restore the
-        // old KeyStore-wrapped key is undecryptable — the legacy path will
-        // succeed and trigger migrateDeviceKeyToKeyStore on first access.
-        copyFromDir(tempDir, "device_key", encryptionDir)
-        val tempSalt = File(tempDir, "salt")
-        if (tempSalt.exists()) {
-            tempSalt.copyTo(File(encryptionDir, "salt"), overwrite = true)
+
+        entries["keys/wrapped_master_key"]?.let {
+            File(encryptionDir, "wrapped_master_key").writeBytes(it)
+        }
+        entries["keys/device_key"]?.let {
+            File(encryptionDir, "device_key").writeBytes(it)
+        }
+        entries["keys/salt"]?.let {
+            File(encryptionDir, "salt").writeBytes(it)
+        }
+
+        var masterKey = encryptionManager.getMasterKeyForSession()
+        if (masterKey == null) {
+            masterKey = encryptionManager.getMasterKeyForSession()
+        }
+
+        masterKey?.let { mk ->
+            entries["db/docwallet.db"]?.let { dbData ->
+                val tempDb = File(context.cacheDir, "restore_db_${System.currentTimeMillis()}.db")
+                try {
+                    tempDb.writeBytes(dbData)
+                    val currentDb = getDatabase()
+                    if (currentDb != null) {
+                        databaseMerger.merge(tempDb, mk)
+                    } else {
+                        val dbFile = context.getDatabasePath("docwallet.db")
+                        dbFile.parentFile?.mkdirs()
+                        tempDb.copyTo(dbFile, overwrite = true)
+                    }
+                } finally {
+                    tempDb.delete()
+                }
+            }
+
+            val filesDir = File(context.filesDir, "files").also { it.mkdirs() }
+            for ((entryName, data) in entries) {
+                if (entryName.startsWith("files/")) {
+                    val relativePath = entryName.removePrefix("files/")
+                    if (relativePath.isNotEmpty()) {
+                        val targetFile = File(filesDir, relativePath)
+                        targetFile.parentFile?.mkdirs()
+                        if (!targetFile.exists()) {
+                            targetFile.writeBytes(data)
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private suspend fun mergeDatabase(backupDbFile: File, masterKey: ByteArray) {
-        val currentDb = getDatabase() ?: return
-        val backupDb = withContext(Dispatchers.IO) {
-            SQLiteDatabase.openOrCreateDatabase(
-                backupDbFile.absolutePath, masterKey, null
-            )
+    private suspend fun importLegacyBackup(source: File, backupPassword: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val encryptedBytes = source.readBytes()
+                val salt = encryptedBytes.copyOfRange(0, 16)
+                val iv = encryptedBytes.copyOfRange(16, 28)
+                val ciphertext = encryptedBytes.copyOfRange(28, encryptedBytes.size)
+
+                val derivedKey = keyDerivation.deriveAndZero(backupPassword, salt, kdfParams)
+
+                try {
+                    val plainZipBytes = FileEncryptor().decryptBytes(ciphertext, derivedKey, iv)
+
+                    val tempDir = File(context.cacheDir, "restore_${System.currentTimeMillis()}")
+                    tempDir.mkdirs()
+
+                    ZipInputStream(plainZipBytes.inputStream()).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            val outputFile = File(tempDir, entry.name)
+                            if (entry.isDirectory) {
+                                outputFile.mkdirs()
+                            } else {
+                                outputFile.parentFile?.mkdirs()
+                                outputFile.writeBytes(zis.readBytes())
+                            }
+                            zis.closeEntry()
+                            entry = zis.nextEntry
+                        }
+                    }
+
+                    restoreLegacyFiles(tempDir)
+                    tempDir.deleteRecursively()
+                    true
+                } finally {
+                    java.util.Arrays.fill(derivedKey, 0)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "importLegacyBackup failed", e)
+                false
+            }
+        }
+    }
+
+    private suspend fun restoreLegacyFiles(tempDir: File) {
+        val encryptionDir = File(context.filesDir, "encryption").also { it.mkdirs() }
+
+        val wrappedKey = File(tempDir, "wrapped_master_key")
+        if (wrappedKey.exists()) {
+            wrappedKey.copyTo(File(encryptionDir, "wrapped_master_key"), overwrite = true)
         }
 
-        try {
-            val collections = mutableListOf<Collection>()
-            backupDb.rawQuery("SELECT * FROM collections", null).use { cursor ->
-                while (cursor.moveToNext()) {
-                    collections.add(
-                        Collection(
-                            id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                            name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
-                            icon = cursor.getString(cursor.getColumnIndexOrThrow("icon")),
-                            sortOrder = cursor.getInt(cursor.getColumnIndexOrThrow("sort_order")),
-                            parentId = getStringOrNull(cursor, "parent_id"),
-                        )
-                    )
+        val deviceKey = File(tempDir, "device_key")
+        if (deviceKey.exists()) {
+            deviceKey.copyTo(File(encryptionDir, "device_key"), overwrite = true)
+        }
+
+        val saltFile = File(tempDir, "salt")
+        if (saltFile.exists()) {
+            saltFile.copyTo(File(encryptionDir, "salt"), overwrite = true)
+        }
+
+        var masterKey = encryptionManager.getMasterKeyForSession()
+        if (masterKey == null) {
+            masterKey = encryptionManager.getMasterKeyForSession()
+        }
+
+        masterKey?.let { mk ->
+            val tempDb = File(tempDir, "docwallet.db")
+            if (tempDb.exists()) {
+                val currentDb = getDatabase()
+                if (currentDb != null) {
+                    databaseMerger.merge(tempDb, mk)
+                } else {
+                    val dbFile = context.getDatabasePath("docwallet.db")
+                    dbFile.parentFile?.mkdirs()
+                    tempDb.copyTo(dbFile, overwrite = true)
                 }
-            }
-            for (item in collections) {
-                runCatching { currentDb.collectionDao().insertOrIgnore(item) }
             }
 
-            val tags = mutableListOf<Tag>()
-            backupDb.rawQuery("SELECT * FROM tags", null).use { cursor ->
-                while (cursor.moveToNext()) {
-                    tags.add(
-                        Tag(
-                            id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                            name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
-                            color = cursor.getLong(cursor.getColumnIndexOrThrow("color")),
-                        )
-                    )
-                }
+            val tempFiles = File(tempDir, "files")
+            if (tempFiles.exists()) {
+                mergeFiles(tempFiles)
             }
-            for (item in tags) {
-                runCatching { currentDb.tagDao().insertOrIgnore(item) }
-            }
-
-            val documents = mutableListOf<Document>()
-            backupDb.rawQuery("SELECT * FROM documents", null).use { cursor ->
-                while (cursor.moveToNext()) {
-                    documents.add(
-                        Document(
-                            id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                            title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
-                            fileName = cursor.getString(cursor.getColumnIndexOrThrow("file_name")),
-                            mimeType = cursor.getString(cursor.getColumnIndexOrThrow("mime_type")),
-                            filePath = cursor.getString(cursor.getColumnIndexOrThrow("file_path")),
-                            fileSize = cursor.getLong(cursor.getColumnIndexOrThrow("file_size")),
-                            pageCount = cursor.getInt(cursor.getColumnIndexOrThrow("page_count")),
-                            author = getStringOrNull(cursor, "author") ?: "",
-                            description = getStringOrNull(cursor, "description") ?: "",
-                            thumbnailPath = getStringOrNull(cursor, "thumbnail_path"),
-                            importedAt = cursor.getLong(cursor.getColumnIndexOrThrow("imported_at")),
-                            lastOpenedAt = cursor.getLong(cursor.getColumnIndexOrThrow("last_opened_at")),
-                            isFavorite = cursor.getInt(cursor.getColumnIndexOrThrow("is_favorite")) != 0,
-                            collectionId = getStringOrNull(cursor, "collection_id"),
-                            encryptionIv = cursor.getBlob(cursor.getColumnIndexOrThrow("encryption_iv")),
-                            textContent = getStringOrNull(cursor, "text_content"),
-                            barcodeFormat = getStringOrNull(cursor, "barcode_format"),
-                            barcodeValue = getStringOrNull(cursor, "barcode_value"),
-                            currentPage = cursor.getInt(cursor.getColumnIndexOrThrow("current_page")),
-                            readingPosition = getStringOrNull(cursor, "reading_position"),
-                        )
-                    )
-                }
-            }
-            for (item in documents) {
-                runCatching { currentDb.documentDao().insertOrIgnore(item) }
-            }
-
-            backupDb.rawQuery("SELECT * FROM document_tags", null).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val dt = DocumentTag(
-                        documentId = cursor.getString(cursor.getColumnIndexOrThrow("document_id")),
-                        tagId = cursor.getString(cursor.getColumnIndexOrThrow("tag_id")),
-                    )
-                    runCatching { currentDb.documentTagDao().insertOrIgnore(dt) }
-                }
-            }
-        } finally {
-            backupDb.close()
         }
     }
 
@@ -297,39 +300,9 @@ class BackupManager(
         }
     }
 
-    private fun getStringOrNull(cursor: net.sqlcipher.Cursor, columnName: String): String? {
-        val index = cursor.getColumnIndexOrThrow(columnName)
-        return if (cursor.isNull(index)) null else cursor.getString(index)
-    }
-
-    private fun copyToDir(source: File, targetDir: File) {
-        if (source.exists()) {
-            source.copyTo(File(targetDir, source.name), overwrite = true)
-        }
-    }
-
-    private fun copyFromDir(sourceDir: File, fileName: String, targetDir: File) {
-        val source = File(sourceDir, fileName)
-        if (source.exists()) {
-            source.copyTo(File(targetDir, fileName), overwrite = true)
-        }
-    }
-
-    private fun copyDirectory(source: File, target: File) {
-        target.mkdirs()
-        source.listFiles()?.forEach { file ->
-            val dest = File(target, file.name)
-            if (file.isDirectory) {
-                copyDirectory(file, dest)
-            } else {
-                file.copyTo(dest, overwrite = true)
-            }
-        }
-    }
-
     suspend fun exportBackupToUri(uri: Uri, backupPassword: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val tempFile = File(context.cacheDir, "backup_export_${System.currentTimeMillis()}.backup")
+            val tempFile = File(context.cacheDir, "backup_export_${System.currentTimeMillis()}.vault")
             val success = exportBackup(tempFile, backupPassword)
             if (!success) return@withContext false
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
@@ -338,14 +311,14 @@ class BackupManager(
             tempFile.delete()
             true
         } catch (e: Exception) {
-            Log.e("BackupManager", "exportBackupToUri failed", e)
+            Log.e(TAG, "exportBackupToUri failed", e)
             false
         }
     }
 
     suspend fun importBackupFromUri(uri: Uri, backupPassword: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val tempFile = File(context.cacheDir, "backup_import_${System.currentTimeMillis()}.backup")
+            val tempFile = File(context.cacheDir, "backup_import_${System.currentTimeMillis()}.vault")
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 tempFile.outputStream().use { outputStream ->
                     inputStream.copyTo(outputStream)
@@ -355,8 +328,12 @@ class BackupManager(
             tempFile.delete()
             success
         } catch (e: Exception) {
-            Log.e("BackupManager", "importBackupFromUri failed", e)
+            Log.e(TAG, "importBackupFromUri failed", e)
             false
         }
+    }
+
+    companion object {
+        private const val TAG = "BackupManager"
     }
 }

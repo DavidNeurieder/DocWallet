@@ -1,101 +1,25 @@
 package com.docwallet.data.encryption
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import android.util.Log
+import com.docwallet.vault.crypto.AesKeyGenerator
 import com.docwallet.vault.crypto.Argon2Hasher
 import com.docwallet.vault.crypto.Argon2HasherImpl
+import com.docwallet.vault.crypto.KdfParams
+import com.docwallet.vault.crypto.KeyDerivation
 import com.docwallet.vault.crypto.KeyManager
+import com.docwallet.vault.crypto.KeyWrap
 import java.io.File
-import java.security.KeyStore
-import java.security.SecureRandom
 import java.util.Arrays
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
-
-interface KeyStoreCryptographer {
-    fun encrypt(plaintext: ByteArray): Pair<ByteArray, ByteArray>
-    fun decrypt(iv: ByteArray, ciphertext: ByteArray): ByteArray
-    fun deleteKey()
-}
-
-internal class AndroidKeyStoreCryptographer : KeyStoreCryptographer {
-    override fun encrypt(plaintext: ByteArray): Pair<ByteArray, ByteArray> {
-        val key = getOrCreateKey()
-            ?: throw SecurityException("AndroidKeyStore not available — cannot encrypt device key")
-        try {
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, key)
-            return Pair(cipher.iv, cipher.doFinal(plaintext))
-        } catch (e: Exception) {
-            throw SecurityException("KeyStore encryption failed", e)
-        }
-    }
-
-    override fun decrypt(iv: ByteArray, ciphertext: ByteArray): ByteArray {
-        val key = getOrCreateKey()
-            ?: throw SecurityException("AndroidKeyStore not available — cannot decrypt device key")
-        try {
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
-            return cipher.doFinal(ciphertext)
-        } catch (e: Exception) {
-            throw SecurityException("KeyStore decryption failed", e)
-        }
-    }
-
-    override fun deleteKey() {
-        try {
-            val keyStore = KeyStore.getInstance("AndroidKeyStore")
-            keyStore.load(null)
-            if (keyStore.containsAlias(KEYSTORE_DEVICE_KEY_ALIAS)) {
-                keyStore.deleteEntry(KEYSTORE_DEVICE_KEY_ALIAS)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to delete KeyStore key", e)
-        }
-    }
-
-    private fun getOrCreateKey(): SecretKey? {
-        return try {
-            val keyStore = KeyStore.getInstance("AndroidKeyStore")
-            keyStore.load(null)
-            if (keyStore.containsAlias(KEYSTORE_DEVICE_KEY_ALIAS)) {
-                return (keyStore.getEntry(KEYSTORE_DEVICE_KEY_ALIAS, null) as KeyStore.SecretKeyEntry).secretKey
-            }
-            val keyGen = KeyGenerator.getInstance("AES", "AndroidKeyStore")
-            keyGen.init(
-                KeyGenParameterSpec.Builder(
-                    KEYSTORE_DEVICE_KEY_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-                )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .build()
-            )
-            keyGen.generateKey()
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to access AndroidKeyStore", e)
-            null
-        }
-    }
-
-    companion object {
-        private const val TAG = "AndroidKeyStoreCryptographer"
-        private const val KEYSTORE_DEVICE_KEY_ALIAS = "docwallet_device_key"
-    }
-}
 
 class EncryptionManager(
     private val context: Context,
     private val argon2Hasher: Argon2Hasher = Argon2HasherImpl(),
     internal val keyStoreCryptographer: KeyStoreCryptographer = AndroidKeyStoreCryptographer(),
 ) : KeyManager {
+
+    private val keyDerivation = KeyDerivation(argon2Hasher)
+    private val kdfParams = KdfParams()
 
     companion object {
         private const val TAG = "EncryptionManager"
@@ -104,13 +28,7 @@ class EncryptionManager(
         private const val DEVICE_KEY_FILE = "device_key"
         private const val ENCRYPTED_DEVICE_KEY_FILE = "encrypted_device_key"
         private const val SALT_FILE = "salt"
-        private const val ALGORITHM = "AES"
-        private const val KEY_WRAP_ALGORITHM = "AESWrap"
-        private const val KEY_SIZE = 256
         private const val GCM_IV_LENGTH = 12
-        private const val ARGON_MEMORY_COST = 19456
-        private const val ARGON_ITERATIONS = 2
-        private const val ARGON_PARALLELISM = 2
     }
 
     @Volatile private var cachedMasterKey: ByteArray? = null
@@ -138,19 +56,17 @@ class EncryptionManager(
         return wrappedKeyFile.exists().not()
     }
 
-    fun initializeDeviceKeyMode() {
+    override fun initializeDeviceKeyMode() {
         if (wrappedKeyFile.exists()) return
 
-        val masterKey = generateAesKey()
-        val deviceKey = generateAesKey()
+        val masterKey = AesKeyGenerator.generateKey()
+        val deviceKey = AesKeyGenerator.generateKey()
 
         try {
-            val wrappedKey = wrapKey(masterKey, deviceKey)
+            val wrappedKey = KeyWrap.wrap(masterKey, deviceKey)
             wrappedKeyFile.writeBytes(wrappedKey)
-
-                val (iv, encrypted) = keyStoreCryptographer.encrypt(deviceKey)
-                encryptedDeviceKeyFile.writeBytes(iv + encrypted)
-
+            val (iv, encrypted) = keyStoreCryptographer.encrypt(deviceKey)
+            encryptedDeviceKeyFile.writeBytes(iv + encrypted)
             cachedMasterKey = masterKey
             Log.d(TAG, "Initialized device-key mode with KeyStore protection")
         } finally {
@@ -174,7 +90,7 @@ class EncryptionManager(
             }
             val wrappedKey = wrappedKeyFile.readBytes()
             try {
-                val masterKey = unwrapKey(wrappedKey, deviceKey)
+                val masterKey = KeyWrap.unwrap(wrappedKey, deviceKey)
                 cachedMasterKey = masterKey
                 return masterKey.copyOf()
             } catch (e: Exception) {
@@ -187,7 +103,7 @@ class EncryptionManager(
             val deviceKey = deviceKeyFile.readBytes()
             val wrappedKey = wrappedKeyFile.readBytes()
             try {
-                val masterKey = unwrapKey(wrappedKey, deviceKey)
+                val masterKey = KeyWrap.unwrap(wrappedKey, deviceKey)
                 cachedMasterKey = masterKey
                 migrateDeviceKeyToKeyStore(deviceKey)
                 return masterKey.copyOf()
@@ -211,20 +127,38 @@ class EncryptionManager(
         }
     }
 
-    fun setPassword(password: String): Boolean {
+    fun resolveDeviceKeyForBackup(): ByteArray? {
+        if (encryptedDeviceKeyFile.exists()) {
+            val data = encryptedDeviceKeyFile.readBytes()
+            val iv = data.copyOfRange(0, GCM_IV_LENGTH)
+            val ciphertext = data.copyOfRange(GCM_IV_LENGTH, data.size)
+            return try {
+                keyStoreCryptographer.decrypt(iv, ciphertext)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to decrypt device key for backup", e)
+                null
+            }
+        }
+        if (deviceKeyFile.exists()) {
+            return deviceKeyFile.readBytes()
+        }
+        return null
+    }
+
+    override fun setPassword(password: String): Boolean {
         try {
             val masterKey = getMasterKeyForSession() ?: return false
-            val salt = generateSalt()
-            val userKey = deriveKey(password, salt)
+            val salt = keyDerivation.generateSalt()
+            val userKey = keyDerivation.deriveAndZero(password, salt, kdfParams)
 
             try {
-                val wrappedKey = wrapKey(masterKey, userKey)
+                val wrappedKey = KeyWrap.wrap(masterKey, userKey)
                 wrappedKeyFile.writeBytes(wrappedKey)
                 saltFile.writeBytes(salt)
 
-            if (encryptedDeviceKeyFile.exists()) encryptedDeviceKeyFile.delete()
-            if (deviceKeyFile.exists()) deviceKeyFile.delete()
-            keyStoreCryptographer.deleteKey()
+                if (encryptedDeviceKeyFile.exists()) encryptedDeviceKeyFile.delete()
+                if (deviceKeyFile.exists()) deviceKeyFile.delete()
+                keyStoreCryptographer.deleteKey()
 
                 cachedMasterKey = masterKey
                 Log.d(TAG, "Password enabled")
@@ -238,17 +172,17 @@ class EncryptionManager(
         }
     }
 
-    fun verifyPassword(password: String): Boolean {
+    override fun verifyPassword(password: String): Boolean {
         return try {
             val wrappedKey = wrappedKeyFile.readBytes()
             val salt = if (saltFile.exists()) saltFile.readBytes() else return false
-            val userKey = deriveKey(password, salt)
+            val userKey = keyDerivation.deriveAndZero(password, salt, kdfParams)
 
             try {
-                val masterKey = unwrapKey(wrappedKey, userKey)
+                val masterKey = KeyWrap.unwrap(wrappedKey, userKey)
                 cachedMasterKey = masterKey
                 Log.d(TAG, "Password verified")
-                return true
+                true
             } finally {
                 Arrays.fill(userKey, 0)
             }
@@ -258,24 +192,23 @@ class EncryptionManager(
         }
     }
 
-    fun changePassword(oldPassword: String, newPassword: String): Boolean {
+    override fun changePassword(oldPassword: String, newPassword: String): Boolean {
         return try {
             val wrappedKey = wrappedKeyFile.readBytes()
             val salt = saltFile.readBytes()
-            val oldUserKey = deriveKey(oldPassword, salt)
-            val masterKey = unwrapKey(wrappedKey, oldUserKey)
+            val oldUserKey = keyDerivation.deriveAndZero(oldPassword, salt, kdfParams)
+            val masterKey = KeyWrap.unwrap(wrappedKey, oldUserKey)
 
-            val newSalt = generateSalt()
-            val newUserKey = deriveKey(newPassword, newSalt)
+            val newSalt = keyDerivation.generateSalt()
+            val newUserKey = keyDerivation.deriveAndZero(newPassword, newSalt, kdfParams)
 
             try {
-                val newWrappedKey = wrapKey(masterKey, newUserKey)
+                val newWrappedKey = KeyWrap.wrap(masterKey, newUserKey)
                 wrappedKeyFile.writeBytes(newWrappedKey)
                 saltFile.writeBytes(newSalt)
-
                 cachedMasterKey = masterKey
                 Log.d(TAG, "Password changed")
-                return true
+                true
             } finally {
                 Arrays.fill(oldUserKey, 0)
                 Arrays.fill(newUserKey, 0)
@@ -286,24 +219,24 @@ class EncryptionManager(
         }
     }
 
-    fun disablePassword(): Boolean {
+    override fun disablePassword(): Boolean {
         return try {
             val masterKey = getMasterKeyForSession() ?: return false
-            val deviceKey = generateAesKey()
+            val deviceKey = AesKeyGenerator.generateKey()
 
             try {
-                val wrappedKey = wrapKey(masterKey, deviceKey)
+                val wrappedKey = KeyWrap.wrap(masterKey, deviceKey)
                 wrappedKeyFile.writeBytes(wrappedKey)
 
-            val (iv, encrypted) = keyStoreCryptographer.encrypt(deviceKey)
-            encryptedDeviceKeyFile.writeBytes(iv + encrypted)
+                val (iv, encrypted) = keyStoreCryptographer.encrypt(deviceKey)
+                encryptedDeviceKeyFile.writeBytes(iv + encrypted)
 
                 if (saltFile.exists()) saltFile.delete()
                 if (deviceKeyFile.exists()) deviceKeyFile.delete()
 
                 cachedMasterKey = masterKey
                 Log.d(TAG, "Password disabled")
-                return true
+                true
             } finally {
                 Arrays.fill(deviceKey, 0)
             }
@@ -318,43 +251,5 @@ class EncryptionManager(
         cachedMasterKey?.let { Arrays.fill(it, 0) }
         cachedMasterKey = null
         Log.d(TAG, "Session locked")
-    }
-
-    private fun generateAesKey(): ByteArray {
-        val keyGen = KeyGenerator.getInstance(ALGORITHM)
-        keyGen.init(KEY_SIZE)
-        return keyGen.generateKey().encoded
-    }
-
-    private fun generateSalt(): ByteArray {
-        val salt = ByteArray(16)
-        SecureRandom().nextBytes(salt)
-        return salt
-    }
-
-    private fun deriveKey(password: String, salt: ByteArray): ByteArray {
-        return argon2Hasher.hash(
-            password = password.toByteArray(),
-            salt = salt,
-            tCostInIterations = ARGON_ITERATIONS,
-            mCostInKibibyte = ARGON_MEMORY_COST,
-            parallelism = ARGON_PARALLELISM,
-            hashLengthInBytes = KEY_SIZE / 8,
-        )
-    }
-
-    private fun wrapKey(key: ByteArray, wrappingKey: ByteArray): ByteArray {
-        val keySpec = SecretKeySpec(wrappingKey, ALGORITHM)
-        val cipher = Cipher.getInstance(KEY_WRAP_ALGORITHM)
-        cipher.init(Cipher.WRAP_MODE, keySpec)
-        val secretKey = SecretKeySpec(key, ALGORITHM)
-        return cipher.wrap(secretKey)
-    }
-
-    private fun unwrapKey(wrappedKey: ByteArray, wrappingKeyBytes: ByteArray): ByteArray {
-        val keySpec = SecretKeySpec(wrappingKeyBytes, ALGORITHM)
-        val cipher = Cipher.getInstance(KEY_WRAP_ALGORITHM)
-        cipher.init(Cipher.UNWRAP_MODE, keySpec)
-        return cipher.unwrap(wrappedKey, ALGORITHM, Cipher.SECRET_KEY).encoded
     }
 }

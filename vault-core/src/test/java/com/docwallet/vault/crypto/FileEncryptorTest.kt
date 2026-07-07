@@ -1,6 +1,5 @@
-package com.docwallet.data.encryption
+package com.docwallet.vault.crypto
 
-import com.docwallet.vault.crypto.FileEncryptor
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
