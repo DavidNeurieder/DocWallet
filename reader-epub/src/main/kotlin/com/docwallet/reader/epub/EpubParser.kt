@@ -1,36 +1,43 @@
-package com.docwallet.data.import
+package com.docwallet.reader.epub
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.InputStream
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
-class EpubProcessor : DocumentProcessor {
+data class EpubParseResult(
+    val title: String,
+    val author: String,
+    val coverPath: String?,
+    val spineItems: List<String>,
+    val opfPath: String,
+)
 
-    override suspend fun process(input: File, mimeType: String): ProcessorResult = withContext(Dispatchers.IO) {
-        val zip = ZipFile(input)
+object EpubParser {
 
+    fun parse(file: File): EpubParseResult {
+        val zip = ZipFile(file)
         try {
             val containerEntry = zip.getEntry("META-INF/container.xml")
-                ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
+                ?: throw IllegalArgumentException("Missing META-INF/container.xml in EPUB")
             val containerXml = zip.getInputStream(containerEntry).readBytes()
             val opfPath = parseContainerXml(containerXml)
-                ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
+                ?: throw IllegalArgumentException("No OPF path found in container.xml")
 
             val opfEntry = zip.getEntry(opfPath)
-                ?: return@withContext ProcessorResult(input.nameWithoutExtension, "", 0, null, null)
+                ?: throw IllegalArgumentException("OPF file not found: $opfPath")
             val opfData = zip.getInputStream(opfEntry).readBytes()
 
-            val opfDir = opfPath.substringBeforeLast('/', "").let { if (it.isNotEmpty()) "$it/" else "" }
             val (title, author, coverPath, spineItems) = parseOpf(opfData)
+            return EpubParseResult(title, author, coverPath, spineItems, opfPath)
+        } finally {
+            zip.close()
+        }
+    }
 
-            val pageCount = spineItems.size
-
-            val textContent = buildString {
+    fun readSpineContent(file: File, opfDir: String, spineItems: List<String>): String? {
+        val zip = ZipFile(file)
+        try {
+            return buildString {
                 for (item in spineItems) {
                     val href = if (opfDir.isNotEmpty() && !item.startsWith("/")) "$opfDir$item" else item
                     val entry = zip.getEntry(href) ?: continue
@@ -44,28 +51,13 @@ class EpubProcessor : DocumentProcessor {
                     }
                 }
             }.takeIf { it.isNotBlank() }
-
-            val thumbnailBitmap = coverPath?.let { cover ->
-                val href = if (opfDir.isNotEmpty() && !cover.startsWith("/")) "$opfDir$cover" else cover
-                val entry = zip.getEntry(href)
-                if (entry != null) {
-                    val data = zip.getInputStream(entry).readBytes()
-                    BitmapFactory.decodeByteArray(data, 0, data.size)?.let { bmp ->
-                        scaleToWidth(bmp, 200)
-                    }
-                } else null
-            }
-
-            ProcessorResult(
-                title = title.takeIf { it.isNotBlank() } ?: input.nameWithoutExtension,
-                author = author,
-                pageCount = pageCount,
-                textContent = textContent,
-                thumbnailBitmap = thumbnailBitmap,
-            )
         } finally {
             zip.close()
         }
+    }
+
+    fun resolveOpfDir(opfPath: String): String {
+        return opfPath.substringBeforeLast('/', "").let { if (it.isNotEmpty()) "$it/" else "" }
     }
 
     private fun parseContainerXml(data: ByteArray): String? {
@@ -158,10 +150,5 @@ class EpubProcessor : DocumentProcessor {
         }
 
         return OpfResult(title, author, coverPath, spineItems)
-    }
-
-    private fun scaleToWidth(source: Bitmap, targetWidth: Int): Bitmap {
-        val targetHeight = (targetWidth * source.height) / source.width
-        return Bitmap.createScaledBitmap(source, targetWidth, targetHeight.coerceAtLeast(1), true)
     }
 }

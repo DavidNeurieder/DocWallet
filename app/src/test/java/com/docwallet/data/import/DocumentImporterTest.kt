@@ -8,6 +8,8 @@ import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.encryption.EncryptionManager
 import com.docwallet.data.model.Document
+import com.docwallet.reader.pdf.PdfDocumentProcessor
+import com.docwallet.reader.epub.EpubDocumentProcessor
 import com.docwallet.vault.crypto.Argon2Hasher
 import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.vault.model.DocumentType
@@ -79,16 +81,20 @@ class DocumentImporterTest {
 
         fileEncryptor = FileEncryptor()
 
-        val mockPdfProcessor = mockk<PdfProcessor>()
-        coEvery { mockPdfProcessor.process(any(), any()) } returns ProcessorResult(
+        val mockProcessor = mockk<com.docwallet.vault.reader.DocumentProcessor>()
+        coEvery { mockProcessor.process(any(), any()) } returns com.docwallet.vault.reader.ProcessorResult(
             title = "Mock PDF Title",
             author = "Mock Author",
             pageCount = 1,
             textContent = "Mock extracted text",
-            thumbnailBitmap = null,
+            thumbnailData = null,
         )
 
-        importer = DocumentImporter(context, dao, fileEncryptor, encryptionManager, mockPdfProcessor)
+        importer = DocumentImporter(
+            context, dao, fileEncryptor, encryptionManager,
+            pdfProcessor = mockProcessor,
+            epubProcessor = mockProcessor,
+        )
     }
 
     @After

@@ -29,6 +29,7 @@ desugarJdkLibs = "2.0.4"
 # Test
 junit = "4.13.2"
 mockk = "1.13.9"
+coroutinesCore = "1.7.3"
 coroutinesTest = "1.7.3"
 turbine = "1.0.0"
 androidxTestExtJunit = "1.1.5"
@@ -72,6 +73,8 @@ readium-streamer = { group = "org.readium.kotlin-toolkit", name = "readium-strea
 readium-navigator = { group = "org.readium.kotlin-toolkit", name = "readium-navigator", version.ref = "readium" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
+coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutinesCore" }
+
 # Test
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
@@ -89,5 +92,6 @@ compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-mani
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version = "1.9.22-1.0.17" }

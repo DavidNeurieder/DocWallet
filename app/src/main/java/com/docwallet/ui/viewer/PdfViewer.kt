@@ -18,12 +18,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,16 +36,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
-import com.artifex.mupdf.fitz.ColorSpace
-import com.artifex.mupdf.fitz.Document
-import com.artifex.mupdf.fitz.Matrix
 import com.docwallet.data.PageFitMode
 import com.docwallet.data.PdfPreferences
 import com.docwallet.data.model.Document as DocWalletDocument
+import com.docwallet.reader.pdf.PdfDocumentReader
+import com.docwallet.reader.pdf.toBitmap
+import com.docwallet.vault.reader.RenderConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.ByteBuffer
 
 private const val MAX_CACHED_PAGES = 12
 
@@ -66,6 +65,12 @@ fun PdfViewer(
     onPageChanged: (Int) -> Unit = {},
     pdfPreferences: PdfPreferences = PdfPreferences(),
 ) {
+    val reader = remember { PdfDocumentReader(file.absolutePath) }
+
+    DisposableEffect(Unit) {
+        onDispose { reader.close() }
+    }
+
     var pageCount by remember { mutableIntStateOf(document.pageCount) }
     val initialIndex = (initialPage - 1).coerceAtLeast(0)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
@@ -75,20 +80,14 @@ fun PdfViewer(
 
     LaunchedEffect(Unit) {
         if (pageCount <= 0) {
-            val count = withContext(Dispatchers.IO) {
+            pageCount = withContext(Dispatchers.IO) {
                 try {
-                    val doc = Document.openDocument(file.absolutePath)
-                    try {
-                        doc.countPages()
-                    } finally {
-                        doc.destroy()
-                    }
+                    reader.pageCount
                 } catch (e: Exception) {
                     Log.w("PdfViewer", "Failed to load page count", e)
                     0
                 }
             }
-            pageCount = count
         }
     }
 
@@ -101,33 +100,12 @@ fun PdfViewer(
             if (i !in renderedPages) {
                 withContext(Dispatchers.IO) {
                     try {
-                        val doc = Document.openDocument(file.absolutePath)
-                        try {
-                            val page = doc.loadPage(i)
-                            try {
-                                val scale = 150f / 72f
-                                val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
-                                val pixmap = page.toPixmap(
-                                    matrix, ColorSpace.DeviceRGB, true
-                                )
-                                try {
-                                    val bitmap = Bitmap.createBitmap(
-                                        pixmap.width, pixmap.height,
-                                        Bitmap.Config.ARGB_8888
-                                    )
-                                    bitmap.copyPixelsFromBuffer(
-                                        ByteBuffer.wrap(pixmap.samples)
-                                    )
-                                    renderedPages[i] = bitmap
-                                } finally {
-                                    pixmap.destroy()
-                                }
-                            } finally {
-                                page.destroy()
-                            }
-                        } finally {
-                            doc.destroy()
-                        }
+                        val config = RenderConfig(
+                            width = 0, height = 0,
+                            nightMode = pdfPreferences.nightMode,
+                        )
+                        val rendered = reader.renderPage(i, config)
+                        renderedPages[i] = rendered.toBitmap()
                     } catch (e: Exception) {
                         Log.e("PdfViewer", "Failed to render page $i", e)
                     }
@@ -218,7 +196,7 @@ fun PdfViewer(
             )
         } else {
             CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center)
+                modifier = Modifier.align(Alignment.Center),
             )
         }
     }

@@ -18,3 +18,6 @@ dependencyResolutionManagement {
 rootProject.name = "DocWallet"
 include(":app")
 include(":vault-core")
+include(":vault-reader")
+include(":reader-pdf")
+include(":reader-epub")

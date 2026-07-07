@@ -9,6 +9,8 @@ import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.encryption.EncryptionManager
 import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
+import com.docwallet.reader.pdf.PdfDocumentProcessor
+import com.docwallet.reader.epub.EpubDocumentProcessor
 import com.docwallet.vault.model.DocumentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,7 +25,8 @@ class DocumentImporter(
     private val documentDao: DocumentDao,
     private val fileEncryptor: FileEncryptor,
     private val encryptionManager: EncryptionManager,
-    private val pdfProcessor: PdfProcessor = PdfProcessor(),
+    private val pdfProcessor: com.docwallet.vault.reader.DocumentProcessor = PdfDocumentProcessor(),
+    private val epubProcessor: com.docwallet.vault.reader.DocumentProcessor = EpubDocumentProcessor(),
 ) {
     companion object {
         private const val TAG = "DocumentImporter"
@@ -41,9 +44,6 @@ class DocumentImporter(
             val fileSize = tempFile.length()
 
             val documentType = DocumentType.fromMimeType(mimeType)
-            val processor = getProcessor(documentType)
-            val result = processor?.process(tempFile, mimeType)
-
             val masterKey = encryptionManager.getMasterKeyForSession()
                 ?: return@withContext null.also { Log.e(TAG, "Master key not available") }
 
@@ -51,21 +51,23 @@ class DocumentImporter(
             val encryptedFile = File(filesDir, "${UUID.randomUUID()}.enc")
             val iv = fileEncryptor.encrypt(tempFile, encryptedFile, masterKey)
 
-            val thumbnailPath = result?.thumbnailBitmap?.let { saveThumbnail(it, masterKey) }
+            val (title, author, pageCount, textContent, thumbnailPath) = processDocument(
+                tempFile, mimeType, documentType, masterKey
+            )
 
             val document = Document(
                 id = UUID.randomUUID().toString(),
-                title = result?.title?.takeIf { it.isNotBlank() } ?: fileName,
+                title = title ?: fileName,
                 fileName = fileName,
                 mimeType = mimeType,
                 filePath = encryptedFile.absolutePath,
                 fileSize = fileSize,
-                pageCount = result?.pageCount ?: 0,
-                author = result?.author ?: "",
-                description = result?.textContent?.take(200) ?: "",
+                pageCount = pageCount,
+                author = author ?: "",
+                description = textContent?.take(200) ?: "",
                 thumbnailPath = thumbnailPath,
                 encryptionIv = iv,
-                textContent = result?.textContent,
+                textContent = textContent,
             )
 
             documentDao.insert(document)
@@ -76,6 +78,48 @@ class DocumentImporter(
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
+    }
+
+    private suspend fun processDocument(
+        file: File, mimeType: String, documentType: DocumentType, masterKey: ByteArray,
+    ): ProcessedDocument {
+        return when (documentType) {
+            DocumentType.PDF -> {
+                val result = pdfProcessor.process(file, mimeType)
+                val thumbPath = result.thumbnailData?.let { saveThumbnailBytes(it, masterKey) }
+                ProcessedDocument(result.title, result.author, result.pageCount, result.textContent, thumbPath)
+            }
+            DocumentType.EPUB -> {
+                val result = epubProcessor.process(file, mimeType)
+                val thumbPath = result.thumbnailData?.let { saveThumbnailBytes(it, masterKey) }
+                ProcessedDocument(result.title, result.author, result.pageCount, result.textContent, thumbPath)
+            }
+            else -> {
+                val processor = getLegacyProcessor(documentType)
+                val result = processor?.process(file, mimeType)
+                val thumbPath = result?.thumbnailBitmap?.let { saveThumbnail(it, masterKey) }
+                ProcessedDocument(
+                    result?.title, result?.author, result?.pageCount ?: 0,
+                    result?.textContent, thumbPath,
+                )
+            }
+        }
+    }
+
+    private data class ProcessedDocument(
+        val title: String?,
+        val author: String?,
+        val pageCount: Int,
+        val textContent: String?,
+        val thumbnailPath: String?,
+    )
+
+    private fun saveThumbnailBytes(data: ByteArray, masterKey: ByteArray): String {
+        val filesDir = File(context.filesDir, "files").also { it.mkdirs() }
+        val thumbFile = File(filesDir, "${UUID.randomUUID()}_thumb")
+        val (iv, encrypted) = fileEncryptor.encryptBytes(data, masterKey)
+        thumbFile.writeBytes(iv + encrypted)
+        return thumbFile.absolutePath
     }
 
     suspend fun importNote(title: String, content: String): Document? = withContext(Dispatchers.IO) {
@@ -117,15 +161,12 @@ class DocumentImporter(
         }
     }
 
-    private fun getProcessor(documentType: DocumentType): DocumentProcessor? {
+    private fun getLegacyProcessor(documentType: DocumentType): DocumentProcessor? {
         return when (documentType) {
-            DocumentType.PDF -> pdfProcessor
-            DocumentType.EPUB -> EpubProcessor()
             DocumentType.PKPASS -> PkPassProcessor()
             DocumentType.CBZ, DocumentType.CBR -> ComicProcessor()
             DocumentType.IMAGE -> ImageProcessor()
-            DocumentType.NOTE -> null
-            DocumentType.UNKNOWN -> null
+            DocumentType.PDF, DocumentType.EPUB, DocumentType.NOTE, DocumentType.UNKNOWN -> null
         }
     }
 

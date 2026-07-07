@@ -11,10 +11,16 @@
 # Module build outputs
 app/build/
 vault-core/build/
+vault-reader/build/
+reader-pdf/build/
+reader-epub/build/
 
 # Test reports
 app/build/reports/
 vault-core/build/reports/
+vault-reader/build/reports/
+reader-pdf/build/reports/
+reader-epub/build/reports/
 *.test-results/
 
 # Signing keys (never commit these)
