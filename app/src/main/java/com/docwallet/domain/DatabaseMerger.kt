@@ -25,12 +25,13 @@ class DatabaseMerger(
                 try {
                     val currentHandle = SqlHandleSupportAndroid(currentDb.openHelper.writableDatabase)
                     val result = backupVault.mergeFrom(currentHandle)
-                    if (result) {
-                        Log.d(TAG, "Database merge completed")
-                    } else {
-                        Log.e(TAG, "Database merge failed")
+                    Log.d(TAG, "Merge: ${result.documentsAdded} added, ${result.documentsUpdated} updated, " +
+                        "${result.documentsConflicted} conflicts, ${result.documentsSkipped} skipped, " +
+                        "${result.collectionsAdded} collections, ${result.tagsAdded} tags")
+                    if (result.hasConflicts) {
+                        Log.w(TAG, "Merge completed with ${result.documentsConflicted} conflict(s)")
                     }
-                    result
+                    true
                 } catch (e: Exception) {
                     Log.e(TAG, "Database merge failed", e)
                     false

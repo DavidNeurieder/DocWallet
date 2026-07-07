@@ -6,7 +6,7 @@ class VaultDatabase(val handle: SqlHandle) : AutoCloseable {
         DatabaseSchema.createAllTables(handle)
     }
 
-    fun mergeFrom(backupDb: SqlHandle): Boolean {
+    fun mergeFrom(backupDb: SqlHandle): MergeResult {
         return VaultDatabaseMerger().merge(backupDb, handle)
     }
 
