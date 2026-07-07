@@ -23,7 +23,7 @@ class BackupManager(
     private val hasher = Argon2HasherImpl()
     private val keyDerivation = KeyDerivation(hasher)
     private val kdfParams = KdfParams()
-    private val databaseMerger = DatabaseMerger(getDatabase)
+    private val databaseMerger = DatabaseMerger(context, getDatabase)
     private val vaultExporter = VaultExporter(keyDerivation, kdfParams, FileEncryptor())
     private val vaultImporter = VaultImporter(keyDerivation, kdfParams, FileEncryptor())
 
