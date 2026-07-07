@@ -6,11 +6,11 @@ import android.graphics.Color
 import androidx.room.Room
 import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
-import com.docwallet.data.encryption.Argon2Hasher
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.crypto.Argon2Hasher
+import com.docwallet.vault.crypto.FileEncryptor
+import com.docwallet.vault.model.DocumentType
 import com.docwallet.data.encryption.TestKeyStoreCryptographer
 import io.mockk.coEvery
 import io.mockk.every

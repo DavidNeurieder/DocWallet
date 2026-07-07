@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.docwallet.DocWalletApplication
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

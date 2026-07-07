@@ -1,4 +1,4 @@
-package com.docwallet.data.encryption
+package com.docwallet.vault.crypto
 
 import com.lambdapioneer.argon2kt.Argon2Kt
 import com.lambdapioneer.argon2kt.Argon2Mode

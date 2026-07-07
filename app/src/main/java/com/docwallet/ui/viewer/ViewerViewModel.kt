@@ -6,9 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.SessionStore
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

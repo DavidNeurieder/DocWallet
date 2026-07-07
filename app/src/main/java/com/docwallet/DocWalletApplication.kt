@@ -8,9 +8,9 @@ import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.db.TagDao
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
 import com.docwallet.data.import.DocumentImporter
 import com.docwallet.domain.BackupManager
+import com.docwallet.vault.crypto.FileEncryptor
 import java.util.concurrent.atomic.AtomicInteger
 
 

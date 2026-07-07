@@ -14,7 +14,7 @@ import org.junit.Test
 import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchEngineTest {

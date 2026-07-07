@@ -1,7 +1,7 @@
 package com.docwallet.domain
 
 import com.docwallet.data.db.DocumentDao
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

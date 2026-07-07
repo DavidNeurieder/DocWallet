@@ -1,5 +1,6 @@
 package com.docwallet.data.model
 
+import com.docwallet.vault.model.DocumentType
 import org.junit.Assert.*
 import org.junit.Test
 

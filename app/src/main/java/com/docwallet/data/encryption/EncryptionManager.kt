@@ -4,6 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Log
+import com.docwallet.vault.crypto.Argon2Hasher
+import com.docwallet.vault.crypto.Argon2HasherImpl
+import com.docwallet.vault.crypto.KeyManager
 import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -92,7 +95,7 @@ class EncryptionManager(
     private val context: Context,
     private val argon2Hasher: Argon2Hasher = Argon2HasherImpl(),
     internal val keyStoreCryptographer: KeyStoreCryptographer = AndroidKeyStoreCryptographer(),
-) {
+) : KeyManager {
 
     companion object {
         private const val TAG = "EncryptionManager"
@@ -127,11 +130,11 @@ class EncryptionManager(
     private val saltFile: File
         get() = File(encryptionDir, SALT_FILE)
 
-    fun isPasswordSet(): Boolean {
+    override fun isPasswordSet(): Boolean {
         return encryptedDeviceKeyFile.exists().not() && wrappedKeyFile.exists()
     }
 
-    fun isFirstLaunch(): Boolean {
+    override fun isFirstLaunch(): Boolean {
         return wrappedKeyFile.exists().not()
     }
 
@@ -156,7 +159,7 @@ class EncryptionManager(
     }
 
     @Synchronized
-    fun getMasterKeyForSession(): ByteArray? {
+    override fun getMasterKeyForSession(): ByteArray? {
         cachedMasterKey?.let { return it.copyOf() }
 
         if (encryptedDeviceKeyFile.exists()) {
@@ -311,7 +314,7 @@ class EncryptionManager(
     }
 
     @Synchronized
-    fun lock() {
+    override fun lock() {
         cachedMasterKey?.let { Arrays.fill(it, 0) }
         cachedMasterKey = null
         Log.d(TAG, "Session locked")

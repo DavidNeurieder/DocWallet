@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DocWallet"
 include(":app")
+include(":vault-core")

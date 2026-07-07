@@ -58,7 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import com.docwallet.ui.common.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)

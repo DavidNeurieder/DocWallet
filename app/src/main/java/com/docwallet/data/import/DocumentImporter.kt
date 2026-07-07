@@ -7,9 +7,9 @@ import android.provider.OpenableColumns
 import android.util.Log
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream

@@ -1,6 +1,7 @@
 package com.docwallet.data.encryption
 
 import android.app.Application
+import com.docwallet.vault.crypto.Argon2Hasher
 import io.mockk.*
 import org.junit.After
 import org.junit.Assert.*

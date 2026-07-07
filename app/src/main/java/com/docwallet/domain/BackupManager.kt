@@ -4,9 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.docwallet.data.db.DocWalletDatabase
-import com.docwallet.data.encryption.Argon2HasherImpl
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.Argon2HasherImpl
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Collection
 import com.docwallet.data.model.Document
 import com.docwallet.data.model.DocumentTag

@@ -4,7 +4,7 @@ import com.docwallet.DocWalletApplication
 import com.docwallet.data.SessionStore
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
 import io.mockk.coEvery
 import io.mockk.every

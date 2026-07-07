@@ -4,7 +4,7 @@ import android.content.Context
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.db.TagDao
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow

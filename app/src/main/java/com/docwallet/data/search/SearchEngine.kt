@@ -4,7 +4,7 @@ import android.database.Cursor
 import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow

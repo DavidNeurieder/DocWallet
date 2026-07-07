@@ -62,7 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import com.docwallet.ui.common.EmptyState
 
 private val IMPORT_MIME_TYPES = arrayOf(

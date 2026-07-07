@@ -1,4 +1,4 @@
-package com.docwallet.data.encryption
+package com.docwallet.vault.crypto
 
 interface Argon2Hasher {
     fun hash(

@@ -1,4 +1,4 @@
-package com.docwallet.data.model
+package com.docwallet.vault.model
 
 enum class DocumentType(val mimeType: String, val extensions: List<String>) {
     PDF("application/pdf", listOf("pdf")),

@@ -8,8 +8,9 @@
 .externalNativeBuild
 .cxx
 
-# App build outputs
+# Module build outputs
 app/build/
+vault-core/build/
 
 # Signing keys (never commit these)
 *.jks

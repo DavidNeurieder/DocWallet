@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.docwallet.data.db.DocWalletDatabase
-import com.docwallet.data.encryption.Argon2Hasher
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.Argon2Hasher
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.encryption.KeyStoreCryptographer
 import com.docwallet.data.model.Document
 import kotlinx.coroutines.flow.first

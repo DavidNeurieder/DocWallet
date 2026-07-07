@@ -1,4 +1,4 @@
-package com.docwallet.data.encryption
+package com.docwallet.vault.crypto
 
 import java.io.File
 import javax.crypto.Cipher
@@ -15,7 +15,7 @@ class FileEncryptor {
         private const val ALGORITHM = "AES"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_LENGTH = 128
-        private const val IV_LENGTH = 12
+        const val IV_LENGTH = 12
     }
 
     fun encrypt(input: File, output: File, key: ByteArray): ByteArray {

@@ -5,7 +5,7 @@ import android.net.Uri
 import com.docwallet.data.barcode.BarcodeDetector
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.import.DocumentImporter
 import com.docwallet.data.model.Document
 import com.docwallet.data.search.FtsIndexer

@@ -10,7 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentListItem
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import com.docwallet.ui.common.ThumbnailCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

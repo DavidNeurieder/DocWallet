@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.sqlcipher)
     implementation(libs.sqlite.ktx)
     implementation(libs.documentfile)
+    implementation(project(":vault-core"))
     implementation(libs.argon2kt)
     implementation(libs.commonmark)
     implementation(libs.zxing.core)
