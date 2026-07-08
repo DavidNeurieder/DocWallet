@@ -4,11 +4,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasParent
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentDao
+import com.docwallet.data.db.DocumentListItem
+import com.docwallet.data.db.SearchResultWithOffsets
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -32,7 +37,8 @@ class LibraryScreenTest {
     @Before
     fun setUp() {
         every { mockApp.documentDao } returns mockDao
-        every { mockDao.getAllDocuments() } returns flowOf(emptyList())
+        every { mockDao.getDocumentList() } returns flowOf(emptyList())
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(emptyList())
         viewModel = LibraryViewModel(mockApp)
     }
 
@@ -42,6 +48,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -56,11 +63,13 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
             }
         }
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
         composeTestRule.onNodeWithText("Search documents").assertExists()
     }
 
@@ -70,6 +79,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -84,12 +94,13 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
             }
         }
-        composeTestRule.onNodeWithText("All").assertExists()
+        composeTestRule.onNodeWithText("All").performClick()
         composeTestRule.onNodeWithText("PDFs").assertExists()
         composeTestRule.onNodeWithText("Books").assertExists()
     }
@@ -100,6 +111,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -114,6 +126,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -121,5 +134,80 @@ class LibraryScreenTest {
         }
         composeTestRule.onNodeWithText("No documents yet").assertExists()
         composeTestRule.onNodeWithText("Tap + to add your first document").assertExists()
+    }
+
+    @Test
+    fun `search shows results inline`() {
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(
+            listOf(
+                SearchResultWithOffsets(
+                    id = "1",
+                    title = "Doc One",
+                    mimeType = "application/pdf",
+                    pageCount = 10,
+                    author = "Author",
+                    thumbnailPath = null,
+                    textContent = "The quick fox jumps",
+                    highlightContent = "The quick \u0001fox\u0002 jumps",
+                )
+            )
+        )
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                LibraryScreen(
+                    onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
+                    onSettingsClick = {},
+                    viewModel = viewModel,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
+        composeTestRule.onNode(hasSetTextAction()).performTextInput("fox")
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("Doc One").assertExists()
+    }
+
+    @Test
+    fun `search clears results on close`() {
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(
+            listOf(
+                SearchResultWithOffsets(
+                    id = "1",
+                    title = "Doc One",
+                    mimeType = "application/pdf",
+                    pageCount = 10,
+                    author = "Author",
+                    thumbnailPath = null,
+                    textContent = "The quick fox jumps",
+                    highlightContent = "The quick \u0001fox\u0002 jumps",
+                )
+            )
+        )
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                LibraryScreen(
+                    onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
+                    onSettingsClick = {},
+                    viewModel = viewModel,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
+        composeTestRule.onNode(hasSetTextAction()).performTextInput("fox")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Doc One").assertExists()
+
+        composeTestRule.onNodeWithContentDescription("Close search").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("DocWallet").assertExists()
+        composeTestRule.onNodeWithText("Doc One").assertDoesNotExist()
     }
 }

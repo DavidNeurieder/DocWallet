@@ -6,9 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.SessionStore
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,7 +37,7 @@ class ViewerViewModel @JvmOverloads constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun loadDocument(documentId: String) {
+    fun loadDocument(documentId: String, isNewNote: Boolean = false) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
@@ -45,8 +45,7 @@ class ViewerViewModel @JvmOverloads constructor(
                 app.documentDao.getDocumentById(documentId)
             }
             if (doc == null) {
-                val uuidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-                if (uuidRegex.matches(documentId)) {
+                if (isNewNote) {
                     doc = withContext(ioDispatcher) {
                         val filesDir = File(app.filesDir, "files").also { it.mkdirs() }
                         val encryptedFile = File(filesDir, "${java.util.UUID.randomUUID()}.enc")
@@ -70,6 +69,7 @@ class ViewerViewModel @JvmOverloads constructor(
                         document
                     }
                     val emptyFile = File(app.cacheDir, "viewer_${doc.id}_${doc.fileName}")
+                    emptyFile.deleteOnExit()
                     emptyFile.writeText("")
                     _decryptedFile.value = emptyFile
                     _document.value = doc
@@ -77,7 +77,7 @@ class ViewerViewModel @JvmOverloads constructor(
                     _isLoading.value = false
                     return@launch
                 }
-                Log.w("ViewerViewModel", "Document not found for id=$documentId, matchesUuid=${uuidRegex.matches(documentId)}")
+                Log.w("ViewerViewModel", "Document not found for id=$documentId")
                 SessionStore.clearLastDocumentId(app)
                 _error.value = "Document not found"
                 _isLoading.value = false
@@ -90,10 +90,19 @@ class ViewerViewModel @JvmOverloads constructor(
                     ?: throw IllegalStateException("No master key available for decryption")
                 val encryptedFile = File(doc.filePath)
                 val tempFile = File(app.cacheDir, "viewer_${doc.id}_${doc.fileName}")
+                if (tempFile.exists()) tempFile.delete()
+                tempFile.deleteOnExit()
                 val iv = doc.encryptionIv
-                    ?: throw IllegalArgumentException("Document has no encryption IV")
+                    ?: return@withContext null.also {
+                        Log.e("ViewerViewModel", "Document $documentId has no encryption IV")
+                    }
                 fileEncryptor.decrypt(encryptedFile, tempFile, masterKey, iv)
                 tempFile
+            }
+            if (decrypted == null) {
+                _error.value = "Document is corrupted or has no encryption data"
+                _isLoading.value = false
+                return@launch
             }
             _decryptedFile.value = decrypted
 
@@ -111,6 +120,17 @@ class ViewerViewModel @JvmOverloads constructor(
         val doc = _document.value ?: return
         viewModelScope.launch {
             val updated = doc.copy(isFavorite = !doc.isFavorite)
+            withContext(ioDispatcher) {
+                app.documentDao.update(updated)
+            }
+            _document.value = updated
+        }
+    }
+
+    fun renameDocument(newTitle: String) {
+        val doc = _document.value ?: return
+        viewModelScope.launch {
+            val updated = doc.copy(title = newTitle)
             withContext(ioDispatcher) {
                 app.documentDao.update(updated)
             }
@@ -162,6 +182,10 @@ class ViewerViewModel @JvmOverloads constructor(
 
     override fun onCleared() {
         super.onCleared()
+        cleanupTempFiles()
+    }
+
+    fun cleanupTempFiles() {
         _decryptedFile.value?.let { file ->
             try {
                 if (file.exists()) file.delete()

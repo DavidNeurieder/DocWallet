@@ -16,9 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
@@ -34,18 +35,15 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -57,12 +55,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.docwallet.data.model.DocumentType
+import com.docwallet.vault.model.DocumentType
 import com.docwallet.ui.common.EmptyState
 
 private val IMPORT_MIME_TYPES = arrayOf(
@@ -79,25 +79,27 @@ private val IMPORT_MIME_TYPES = arrayOf(
 @Composable
 fun LibraryScreen(
     onDocumentClick: (String) -> Unit,
+    onDocumentClickWithPage: (String, Int) -> Unit,
     onSettingsClick: () -> Unit,
-    onSearchClick: () -> Unit = {},
     onNewNoteClick: () -> Unit = {},
     pendingImportUris: List<Uri> = emptyList(),
     onPendingImportConsumed: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(),
 ) {
     val documents by viewModel.documents.collectAsState()
-    val continueReading by viewModel.continueReading.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
     val selectedSort by viewModel.selectedSort.collectAsState()
     val filterType by viewModel.filterType.collectAsState()
     val favoritesOnly by viewModel.favoritesOnly.collectAsState()
     val snackbarMessage by viewModel.snackbarMessage.collectAsState()
+    val thumbnails by viewModel.thumbnails.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     var fabExpanded by remember { mutableStateOf(false) }
+    var isSearchActive by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -125,23 +127,61 @@ fun LibraryScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "DocWallet",
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onSearchClick) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = "Search",
+                    if (isSearchActive) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.search(it) },
+                            placeholder = { Text("Search documents") },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = MaterialTheme.typography.titleMedium,
+                        )
+                    } else {
+                        Text(
+                            text = "DocWallet",
+                            fontWeight = FontWeight.Bold,
                         )
                     }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Settings",
-                        )
+                },
+                navigationIcon = {
+                    if (isSearchActive) {
+                        IconButton(onClick = { isSearchActive = false; viewModel.search("") }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Close search",
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (isSearchActive) {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.search("") }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = "Clear search",
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "Search",
+                            )
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Settings",
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -205,35 +245,6 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.search(it) },
-                placeholder = { Text("Search documents") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = "Search",
-                    )
-                },
-                trailingIcon = if (searchQuery.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { viewModel.search("") }) {
-                            Icon(
-                                imageVector = Icons.Filled.Clear,
-                                contentDescription = "Clear search",
-                            )
-                        }
-                    }
-                } else null,
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -244,7 +255,7 @@ fun LibraryScreen(
                 var sortExpanded by remember { mutableStateOf(false) }
 
                 FilterChip(
-                    selected = false,
+                    selected = sortExpanded,
                     onClick = { sortExpanded = true },
                     label = { Text(selectedSort.label) },
                 )
@@ -264,128 +275,76 @@ fun LibraryScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                var typeExpanded by remember { mutableStateOf(false) }
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    item {
-                        FilterChip(
-                            selected = filterType == null && !favoritesOnly,
-                            onClick = {
-                                viewModel.setFilter(null)
-                                viewModel.favoritesOnly.value = false
-                            },
-                            label = { Text("All") },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = filterType == DocumentType.PDF,
-                            onClick = { viewModel.setFilter(DocumentType.PDF) },
-                            label = { Text("PDFs") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.PictureAsPdf,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = filterType == DocumentType.EPUB,
-                            onClick = { viewModel.setFilter(DocumentType.EPUB) },
-                            label = { Text("Books") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.AutoStories,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = filterType == DocumentType.CBZ || filterType == DocumentType.CBR,
-                            onClick = {
-                                viewModel.apply {
-                                    setFilter(
-                                        if (filterType == DocumentType.CBZ) null else DocumentType.CBZ
-                                    )
-                                }
-                            },
-                            label = { Text("Comics") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.AutoStories,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = filterType == DocumentType.PKPASS,
-                            onClick = { viewModel.setFilter(DocumentType.PKPASS) },
-                            label = { Text("Passes") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.ConfirmationNumber,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = filterType == DocumentType.IMAGE,
-                            onClick = { viewModel.setFilter(DocumentType.IMAGE) },
-                            label = { Text("Images") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Image,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = filterType == DocumentType.NOTE,
-                            onClick = { viewModel.setFilter(DocumentType.NOTE) },
-                            label = { Text("Notes") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Outlined.Notes,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = favoritesOnly,
-                            onClick = {
-                                viewModel.favoritesOnly.value = !favoritesOnly
-                            },
-                            label = { Text("Favorites") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Favorite,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
+                val typeLabel = when {
+                    filterType == DocumentType.PDF -> "PDFs"
+                    filterType == DocumentType.EPUB -> "Books"
+                    filterType == DocumentType.CBZ || filterType == DocumentType.CBR -> "Comics"
+                    filterType == DocumentType.PKPASS -> "Passes"
+                    filterType == DocumentType.IMAGE -> "Images"
+                    filterType == DocumentType.NOTE -> "Notes"
+                    else -> "All"
                 }
+
+                FilterChip(
+                    selected = filterType != null,
+                    onClick = { typeExpanded = true },
+                    label = { Text(typeLabel) },
+                )
+
+                DropdownMenu(
+                    expanded = typeExpanded,
+                    onDismissRequest = { typeExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("All") },
+                        onClick = { viewModel.setFilter(null); typeExpanded = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("PDFs") },
+                        onClick = { viewModel.setFilter(DocumentType.PDF); typeExpanded = false },
+                        leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null, modifier = Modifier.size(20.dp)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Books") },
+                        onClick = { viewModel.setFilter(DocumentType.EPUB); typeExpanded = false },
+                        leadingIcon = { Icon(Icons.Outlined.AutoStories, null, modifier = Modifier.size(20.dp)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Comics") },
+                        onClick = { viewModel.setFilter(DocumentType.CBZ); typeExpanded = false },
+                        leadingIcon = { Icon(Icons.Outlined.AutoStories, null, modifier = Modifier.size(20.dp)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Passes") },
+                        onClick = { viewModel.setFilter(DocumentType.PKPASS); typeExpanded = false },
+                        leadingIcon = { Icon(Icons.Outlined.ConfirmationNumber, null, modifier = Modifier.size(20.dp)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Images") },
+                        onClick = { viewModel.setFilter(DocumentType.IMAGE); typeExpanded = false },
+                        leadingIcon = { Icon(Icons.Outlined.Image, null, modifier = Modifier.size(20.dp)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Notes") },
+                        onClick = { viewModel.setFilter(DocumentType.NOTE); typeExpanded = false },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Notes, null, modifier = Modifier.size(20.dp)) },
+                    )
+                }
+
+                FilterChip(
+                    selected = favoritesOnly,
+                    onClick = { viewModel.favoritesOnly.value = !favoritesOnly },
+                    label = { Text("Favorites") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Favorite,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                )
             }
 
             if (isLoading) {
@@ -394,6 +353,35 @@ fun LibraryScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator()
+                }
+            } else if (isSearchActive && searchQuery.isNotBlank()) {
+                if (searchResults.isEmpty()) {
+                    EmptyState(
+                        icon = Icons.Filled.Search,
+                        title = "No results found",
+                        subtitle = "Try a different search term",
+                    )
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(searchResults, key = { it.id }) { result ->
+                            SearchResultCard(
+                                result = result,
+                                onClick = {
+                                    viewModel.search("")
+                                    onDocumentClick(result.id)
+                                },
+                                onMatchClick = { docId, pageNumber ->
+                                    viewModel.search("")
+                                    onDocumentClickWithPage(docId, pageNumber)
+                                },
+                                thumbnail = thumbnails[result.id],
+                            )
+                        }
+                    }
                 }
             } else if (documents.isEmpty()) {
                 EmptyState(
@@ -407,97 +395,37 @@ fun LibraryScreen(
                     else "Tap + to add your first document",
                 )
             } else {
+                val listState = remember { LazyListState() }
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (continueReading.isNotEmpty()) {
-                        item {
-                            Column {
-                                Text(
-                                    text = "Continue reading",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(bottom = 4.dp),
-                                )
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    items(continueReading, key = { it.id }) { doc ->
-                                        ContinueReadingCard(
-                                            document = doc,
-                                            onClick = { onDocumentClick(doc.id) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            Spacer(Modifier.height(4.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(4.dp))
-                        }
-                    }
                     items(documents, key = { it.id }) { document ->
                         DocumentCard(
                             document = document,
                             onClick = { onDocumentClick(document.id) },
                             onFavoriteClick = { viewModel.toggleFavorite(document) },
+                            thumbnail = thumbnails[document.id],
                         )
                     }
                 }
             }
         }
     }
-}
 
-@Composable
-private fun ContinueReadingCard(
-    document: com.docwallet.data.model.Document,
-    onClick: () -> Unit,
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.width(160.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-        ) {
-            DocumentTypeIcon(
-                type = com.docwallet.data.model.DocumentType.fromMimeType(document.mimeType),
-                modifier = Modifier.size(32.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = document.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-            if (document.currentPage > 0 && document.pageCount > 0) {
-                Text(
-                    text = "Page ${document.currentPage + 1} of ${document.pageCount}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            } else {
-                Text(
-                    text = "Opened ${formatRelativeTime(document.lastOpenedAt)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
+    LaunchedEffect(Unit) {
+        snapshotFlow { documents }
+            .collect { list ->
+                list.forEach { document ->
+                    document.thumbnailPath?.let { viewModel.loadThumbnail(document.id, it) }
+                }
             }
-        }
     }
 }
 
+@Composable
 private fun formatRelativeTime(timestamp: Long): String {
     val diff = System.currentTimeMillis() - timestamp
     return when {

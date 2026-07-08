@@ -28,17 +28,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.encryption.EncryptionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PasswordSetupScreen(
@@ -46,11 +52,11 @@ fun PasswordSetupScreen(
 ) {
     val context = LocalContext.current
     val encryptionManager = (context.applicationContext as DocWalletApplication).encryptionManager
+    val scope = rememberCoroutineScope()
 
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var showSkipDialog by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -81,7 +87,7 @@ fun PasswordSetupScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Set a password to encrypt your vault. You can always enable this later in Settings.",
+                text = "Set a password to encrypt your vault. You will need this password for backups.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -105,7 +111,7 @@ fun PasswordSetupScreen(
                     }
                 },
                 isError = error != null,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -129,11 +135,11 @@ fun PasswordSetupScreen(
                 },
                 isError = error != null,
                 supportingText = error?.let { { Text(it) } },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
                     onDone = {
                         doSetPassword(
-                            password, confirmPassword, encryptionManager,
+                            password, confirmPassword, encryptionManager, scope,
                             onError = { error = it },
                             onSuccess = onComplete,
                         )
@@ -147,7 +153,7 @@ fun PasswordSetupScreen(
             Button(
                 onClick = {
                     doSetPassword(
-                        password, confirmPassword, encryptionManager,
+                        password, confirmPassword, encryptionManager, scope,
                         onError = { error = it },
                         onSuccess = onComplete,
                     )
@@ -157,42 +163,7 @@ fun PasswordSetupScreen(
                 Text("Set Password & Continue")
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedButton(
-                onClick = { showSkipDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Skip \u2014 Start Without Password")
-            }
         }
-    }
-
-    if (showSkipDialog) {
-        AlertDialog(
-            onDismissRequest = { showSkipDialog = false },
-            title = { Text("Skip Password?") },
-            text = {
-                Text(
-                    "You can enable password protection anytime in Settings. " +
-                            "Your documents will still be encrypted using device-level keys."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSkipDialog = false
-                    encryptionManager.initializeDeviceKeyMode()
-                    onComplete()
-                }) {
-                    Text("Skip")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSkipDialog = false }) {
-                    Text("Set Password")
-                }
-            },
-        )
     }
 }
 
@@ -200,18 +171,23 @@ private fun doSetPassword(
     password: String,
     confirmPassword: String,
     encryptionManager: EncryptionManager,
+    scope: CoroutineScope,
     onError: (String) -> Unit,
     onSuccess: () -> Unit,
 ) {
     when {
-        password.length < 4 -> onError("Password must be at least 4 characters")
+        password.length < 6 -> onError("Password must be at least 6 characters")
         password != confirmPassword -> onError("Passwords do not match")
         else -> {
-            encryptionManager.initializeDeviceKeyMode()
-            if (encryptionManager.setPassword(password)) {
-                onSuccess()
-            } else {
-                onError("Failed to set password")
+            scope.launch(Dispatchers.Default) {
+                val success = encryptionManager.initializeWithPassword(password)
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        onSuccess()
+                    } else {
+                        onError("Failed to set password")
+                    }
+                }
             }
         }
     }

@@ -18,8 +18,8 @@ android {
         applicationId = "com.docwallet"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -91,6 +91,7 @@ dependencies {
     implementation(libs.compose.material.icons)
     implementation(libs.activity.compose)
     implementation(libs.core.ktx)
+    implementation(libs.splash.screen)
     implementation(libs.lifecycle.runtime)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.process)
@@ -101,7 +102,10 @@ dependencies {
     implementation(libs.sqlcipher)
     implementation(libs.sqlite.ktx)
     implementation(libs.documentfile)
-    implementation(libs.argon2kt)
+    implementation(project(":vault-core"))
+    implementation(project(":vault-reader"))
+    implementation(project(":reader-pdf"))
+    implementation(project(":reader-epub"))
     implementation(libs.commonmark)
     implementation(libs.zxing.core)
     implementation(libs.commons.compress)
@@ -128,6 +132,7 @@ dependencies {
 
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.compose.ui.test.manifest)
+    androidTestImplementation(libs.coroutines.test)
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)

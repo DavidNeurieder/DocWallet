@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.docwallet.DocWalletApplication
 import com.docwallet.ui.library.LibraryScreen
@@ -38,8 +39,8 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
-                    onSearchClick = {},
                     onNewNoteClick = {},
                 )
             }
@@ -53,6 +54,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -66,10 +68,12 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
         }
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
         composeTestRule.onNodeWithText("Search documents").assertExists()
     }
 
@@ -79,6 +83,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -92,6 +97,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -106,11 +112,12 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
         }
-        composeTestRule.onNodeWithText("All").assertExists()
+        composeTestRule.onNodeWithText("All").performClick()
         composeTestRule.onNodeWithText("PDFs").assertExists()
         composeTestRule.onNodeWithText("Books").assertExists()
     }

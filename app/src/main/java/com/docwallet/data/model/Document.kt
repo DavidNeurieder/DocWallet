@@ -28,8 +28,14 @@ data class Document(
     val importedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "last_opened_at")
     val lastOpenedAt: Long = 0,
+    @ColumnInfo(name = "modified_at")
+    val modifiedAt: Long = importedAt,
     @ColumnInfo(name = "is_favorite")
     val isFavorite: Boolean = false,
+    @ColumnInfo(name = "is_conflict")
+    val isConflict: Boolean = false,
+    @ColumnInfo(name = "conflict_with")
+    val conflictWith: String? = null,
     @ColumnInfo(name = "collection_id")
     val collectionId: String? = null,
     @ColumnInfo(name = "encryption_iv")

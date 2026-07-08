@@ -1,6 +1,8 @@
 package com.docwallet.data.encryption
 
 import android.app.Application
+import com.docwallet.vault.crypto.Argon2Hasher
+import com.docwallet.vault.crypto.KeyStoreCryptographer
 import io.mockk.*
 import org.junit.After
 import org.junit.Assert.*
@@ -10,6 +12,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.spec.GCMParameterSpec
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
@@ -39,7 +44,8 @@ class EncryptionManagerTest {
         }
 
         val context = RuntimeEnvironment.getApplication().applicationContext
-        manager = EncryptionManager(context, mockHasher)
+        val testCryptographer = TestKeyStoreCryptographer()
+        manager = EncryptionManager(context, mockHasher, testCryptographer)
     }
 
     @After
@@ -80,10 +86,10 @@ class EncryptionManagerTest {
     }
 
     @Test
-    fun `getMasterKeyForSession returns cached key on second call`() {
+    fun `getMasterKeyForSession returns key after lock when device key present`() {
         manager.initializeDeviceKeyMode()
-        manager.lock()
         val key1 = manager.getMasterKeyForSession()
+        manager.lock()
         val key2 = manager.getMasterKeyForSession()
         assertNotNull(key1)
         assertNotNull(key2)
@@ -91,124 +97,116 @@ class EncryptionManagerTest {
     }
 
     @Test
-    fun `setPassword returns true`() {
-        manager.initializeDeviceKeyMode()
-        assertTrue(manager.setPassword("test_password123"))
-    }
-
-    @Test
-    fun `isPasswordSet returns true after setPassword`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+    fun `initializeWithPassword creates wrapped key and device key files`() {
+        assertTrue(manager.initializeWithPassword("test_password"))
+        assertFalse(manager.isFirstLaunch())
         assertTrue(manager.isPasswordSet())
     }
 
     @Test
-    fun `isFirstLaunch returns false after setPassword`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
-        assertFalse(manager.isFirstLaunch())
-    }
-
-    @Test
-    fun `getMasterKeyForSession returns key after setPassword`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+    fun `initializeWithPassword sets up master key for session`() {
+        manager.initializeWithPassword("test_password")
         val key = manager.getMasterKeyForSession()
         assertNotNull(key)
         assertEquals(32, key!!.size)
     }
 
     @Test
-    fun `verifyPassword with correct password returns true`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
-        assertTrue(manager.verifyPassword("test_password123"))
+    fun `verifyPassword with correct password after init`() {
+        manager.initializeWithPassword("test_password")
+        assertTrue(manager.verifyPassword("test_password"))
     }
 
     @Test
-    fun `verifyPassword with wrong password returns false`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+    fun `verifyPassword with wrong password after init returns false`() {
+        manager.initializeWithPassword("test_password")
         assertFalse(manager.verifyPassword("wrong_password"))
     }
 
     @Test
-    fun `getMasterKeyForSession returns key after verify`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+    fun `getMasterKeyForSession returns key via device key after verify`() {
+        manager.initializeWithPassword("test_password")
         manager.lock()
-        manager.verifyPassword("test_password123")
+        manager.verifyPassword("test_password")
         val key = manager.getMasterKeyForSession()
         assertNotNull(key)
         assertEquals(32, key!!.size)
     }
 
     @Test
+    fun `getMasterKeyForSession returns key via device key after lock`() {
+        manager.initializeWithPassword("test_password")
+        manager.lock()
+        val key = manager.getMasterKeyForSession()
+        assertNotNull(key)
+        assertEquals(32, key!!.size)
+    }
+
+    @Test
+    fun `setPassword on password-only mode preserves device keys`() {
+        manager.initializeWithPassword("test_password")
+        val key1 = manager.getMasterKeyForSession()
+        manager.setPassword("new_password")
+        manager.lock()
+        val key2 = manager.getMasterKeyForSession()
+        assertNotNull(key1)
+        assertNotNull(key2)
+        assertArrayEquals(key1, key2)
+    }
+
+    @Test
     fun `changePassword with correct old and new returns true`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("old_password")
+        manager.initializeWithPassword("old_password")
         assertTrue(manager.changePassword("old_password", "new_password"))
     }
 
     @Test
     fun `changePassword with wrong old password returns false`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("old_password")
+        manager.initializeWithPassword("old_password")
         assertFalse(manager.changePassword("wrong_password", "new_password"))
     }
 
     @Test
     fun `verifyPassword with new password works after change`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("old_password")
+        manager.initializeWithPassword("old_password")
         manager.changePassword("old_password", "new_password")
         assertTrue(manager.verifyPassword("new_password"))
     }
 
     @Test
     fun `verifyPassword with old password fails after change`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("old_password")
+        manager.initializeWithPassword("old_password")
         manager.changePassword("old_password", "new_password")
         assertFalse(manager.verifyPassword("old_password"))
     }
 
     @Test
     fun `disablePassword returns true`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+        manager.initializeWithPassword("test_password")
         assertTrue(manager.disablePassword())
     }
 
     @Test
     fun `isPasswordSet returns false after disable`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+        manager.initializeWithPassword("test_password")
         manager.disablePassword()
         assertFalse(manager.isPasswordSet())
     }
 
     @Test
-    fun `lock clears cached key`() {
-        manager.initializeDeviceKeyMode()
+    fun `getMasterKeyForSession still works after disable`() {
+        manager.initializeWithPassword("test_password")
+        manager.disablePassword()
         manager.lock()
         val key = manager.getMasterKeyForSession()
         assertNotNull(key)
+        assertEquals(32, key!!.size)
     }
 
     @Test
-    fun `getMasterKeyForSession returns null after lock`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
-        manager.lock()
-        assertNull(manager.getMasterKeyForSession())
-    }
-
-    @Test
-    fun `double initializeDeviceKeyMode is safe`() {
-        manager.initializeDeviceKeyMode()
-        manager.initializeDeviceKeyMode()
+    fun `double initializeWithPassword returns false`() {
+        manager.initializeWithPassword("test_password")
+        assertFalse(manager.initializeWithPassword("another_password"))
     }
 
     @Test
@@ -224,8 +222,7 @@ class EncryptionManagerTest {
 
     @Test
     fun `full password lifecycle survives simulated app restart`() {
-        manager.initializeDeviceKeyMode()
-        manager.setPassword("test_password123")
+        manager.initializeWithPassword("test_password123")
         val originalKey = manager.getMasterKeyForSession()
         assertNotNull(originalKey)
 
@@ -242,5 +239,24 @@ class EncryptionManagerTest {
         assertEquals(32, restoredKey!!.size)
 
         assertArrayEquals(originalKey, restoredKey)
+    }
+}
+
+class TestKeyStoreCryptographer : KeyStoreCryptographer {
+    private val aesKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+
+    override fun encrypt(plaintext: ByteArray): Pair<ByteArray, ByteArray> {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey)
+        return Pair(cipher.iv, cipher.doFinal(plaintext))
+    }
+
+    override fun decrypt(iv: ByteArray, ciphertext: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, aesKey, javax.crypto.spec.GCMParameterSpec(128, iv))
+        return cipher.doFinal(ciphertext)
+    }
+
+    override fun deleteKey() {
     }
 }

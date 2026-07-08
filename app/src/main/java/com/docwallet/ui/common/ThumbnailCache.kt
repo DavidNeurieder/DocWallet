@@ -10,6 +10,17 @@ object ThumbnailCache {
         override fun sizeOf(key: String, bitmap: Bitmap): Int {
             return bitmap.byteCount
         }
+
+        override fun entryRemoved(
+            evicted: Boolean,
+            key: String,
+            oldValue: Bitmap,
+            newValue: Bitmap?,
+        ) {
+            if (evicted) {
+                oldValue.recycle()
+            }
+        }
     }
 
     fun get(key: String): Bitmap? = cache.get(key)

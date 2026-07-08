@@ -1,5 +1,4 @@
 # DocWallet ProGuard rules
--dontobfuscate
 -keepattributes *Annotation*
 
 # MuPDF (JNI)

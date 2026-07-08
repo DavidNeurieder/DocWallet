@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.encryption.EncryptionManager
+import com.docwallet.domain.BackupProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,16 +25,26 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val newPassword = MutableStateFlow("")
     val confirmPassword = MutableStateFlow("")
 
+    val exportVaultPassword = MutableStateFlow("")
+    val importVaultPassword = MutableStateFlow("")
+
+    val showExportPasswordDialog = MutableStateFlow(false)
+    val showImportPasswordDialog = MutableStateFlow(false)
+    val pendingImportUri = MutableStateFlow<Uri?>(null)
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+
+    private val _backupProgress = MutableStateFlow<BackupProgress?>(null)
+    val backupProgress: StateFlow<BackupProgress?> = _backupProgress.asStateFlow()
 
     fun setPassword() {
         val pwd = newPassword.value
         val confirm = confirmPassword.value
 
         when {
-            pwd.length < 4 -> {
-                _message.value = "Password must be at least 4 characters"
+            pwd.length < 6 -> {
+                _message.value = "Password must be at least 6 characters"
                 return
             }
             pwd != confirm -> {
@@ -42,11 +53,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        if (encryptionManager.setPassword(pwd)) {
-            _message.value = "Password set successfully"
-            clearFields()
-        } else {
-            _message.value = "Failed to set password"
+        viewModelScope.launch(Dispatchers.Default) {
+            if (encryptionManager.setPassword(pwd)) {
+                _message.value = "Password set successfully"
+                clearFields()
+            } else {
+                _message.value = "Failed to set password"
+            }
         }
     }
 
@@ -56,8 +69,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val confirm = confirmPassword.value
 
         when {
-            old.length < 4 || new.length < 4 -> {
-                _message.value = "Password must be at least 4 characters"
+            old.length < 6 || new.length < 6 -> {
+                _message.value = "Password must be at least 6 characters"
                 return
             }
             new != confirm -> {
@@ -66,29 +79,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        if (encryptionManager.changePassword(old, new)) {
-            _message.value = "Password changed successfully"
-            clearFields()
-        } else {
-            _message.value = "Failed to change password. Check your current password."
-        }
-    }
-
-    fun disablePassword() {
-        val pwd = currentPassword.value
-        if (pwd.isBlank()) {
-            _message.value = "Enter your current password to disable"
-            return
-        }
-        if (!encryptionManager.verifyPassword(pwd)) {
-            _message.value = "Wrong password"
-            return
-        }
-        if (encryptionManager.disablePassword()) {
-            _message.value = "Password disabled. Using device-level encryption."
-            clearFields()
-        } else {
-            _message.value = "Failed to disable password"
+        viewModelScope.launch(Dispatchers.Default) {
+            if (encryptionManager.changePassword(old, new)) {
+                _message.value = "Password changed successfully"
+                clearFields()
+            } else {
+                _message.value = "Failed to change password. Check your current password."
+            }
         }
     }
 
@@ -96,23 +93,69 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _message.value = null
     }
 
-    fun exportBackup(uri: Uri) {
+    fun onExportConfirmed(uri: Uri) {
+        val password = exportVaultPassword.value
+
+        if (password.isBlank()) {
+            _message.value = "Enter your vault password"
+            return
+        }
+
+        showExportPasswordDialog.value = false
         viewModelScope.launch {
-            val success = withContext(Dispatchers.IO) {
-                app.backupManager.exportBackupToUri(uri)
+            val success = withContext(Dispatchers.Default) {
+                if (!encryptionManager.verifyPassword(password)) {
+                    return@withContext false
+                }
+                withContext(Dispatchers.IO) {
+                    app.backupManager.exportBackupToUri(uri, password) { progress ->
+                        _backupProgress.value = progress
+                    }
+                }
+            }
+            _backupProgress.value = null
+            if (success) {
+                exportVaultPassword.value = ""
             }
             _message.value = if (success) "Backup exported successfully" else "Backup export failed"
         }
     }
 
-    fun importBackup(uri: Uri) {
+    fun onImportConfirmed() {
+        val password = importVaultPassword.value
+        val uri = pendingImportUri.value ?: return
+
+        if (password.isBlank()) {
+            _message.value = "Enter your vault password"
+            return
+        }
+
+        showImportPasswordDialog.value = false
         viewModelScope.launch {
-            val password = currentPassword.value.takeIf { it.isNotBlank() }
             val success = withContext(Dispatchers.IO) {
-                app.backupManager.importBackupFromUri(uri, password)
+                val ok = app.backupManager.importBackupFromUri(uri, password) { progress ->
+                    _backupProgress.value = progress
+                }
+                if (ok) app.reopenDatabase() else false
+            }
+            _backupProgress.value = null
+            if (success) {
+                importVaultPassword.value = ""
+                pendingImportUri.value = null
             }
             _message.value = if (success) "Backup imported successfully" else "Backup import failed"
         }
+    }
+
+    fun cancelExport() {
+        showExportPasswordDialog.value = false
+        exportVaultPassword.value = ""
+    }
+
+    fun cancelImport() {
+        showImportPasswordDialog.value = false
+        importVaultPassword.value = ""
+        pendingImportUri.value = null
     }
 
     private fun clearFields() {

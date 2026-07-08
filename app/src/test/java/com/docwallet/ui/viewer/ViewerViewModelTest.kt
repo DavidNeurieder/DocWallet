@@ -4,7 +4,7 @@ import com.docwallet.DocWalletApplication
 import com.docwallet.data.SessionStore
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.encryption.EncryptionManager
-import com.docwallet.data.encryption.FileEncryptor
+import com.docwallet.vault.crypto.FileEncryptor
 import com.docwallet.data.model.Document
 import io.mockk.coEvery
 import io.mockk.every
@@ -136,8 +136,8 @@ class ViewerViewModelTest {
         advanceUntilIdle()
     }
 
-    @Test(expected = Exception::class)
-    fun `loadDocument throws when encryption IV is missing`() = runTest(testDispatcher) {
+    @Test
+    fun `loadDocument reports error when encryption IV is missing`() = runTest(testDispatcher) {
         val masterKey = createTestMasterKey()
         val content = "Some content".toByteArray()
         val encrypted = createEncryptedFile(content, masterKey)
@@ -156,6 +156,9 @@ class ViewerViewModelTest {
 
         viewModel.loadDocument("no-iv-id")
         advanceUntilIdle()
+
+        assertEquals("Document is corrupted or has no encryption data", viewModel.error.value)
+        assertNull(viewModel.decryptedFile.value)
     }
 
     @Test
@@ -166,7 +169,7 @@ class ViewerViewModelTest {
         coEvery { mockDao.getDocumentById(noteId) } returns null
         every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
 
-        viewModel.loadDocument(noteId)
+        viewModel.loadDocument(noteId, isNewNote = true)
         advanceUntilIdle()
 
         assertEquals("New Note", viewModel.document.value?.title)
@@ -249,7 +252,7 @@ class ViewerViewModelTest {
         coEvery { mockDao.getDocumentById(noteId) } returns null
         every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
 
-        viewModel.loadDocument(noteId)
+        viewModel.loadDocument(noteId, isNewNote = true)
         advanceUntilIdle()
 
         assertEquals(noteId, SessionStore.getLastDocumentId(mockApp))

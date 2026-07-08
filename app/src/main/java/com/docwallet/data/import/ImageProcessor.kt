@@ -10,7 +10,7 @@ import java.io.File
 class ImageProcessor : DocumentProcessor {
 
     override suspend fun process(input: File, mimeType: String): ProcessorResult = withContext(Dispatchers.IO) {
-        val bitmap = BitmapFactory.decodeFile(input.absolutePath)
+        val bitmap = decodeSampledBitmap(input, maxDimension = 2048)
 
         val pageCount = 1
 
@@ -32,6 +32,28 @@ class ImageProcessor : DocumentProcessor {
             textContent = null,
             thumbnailBitmap = thumbnailBitmap,
         )
+    }
+
+    private fun decodeSampledBitmap(file: File, maxDimension: Int): Bitmap? {
+        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, opts)
+        val sampleSize = calculateInSampleSize(opts.outWidth, opts.outHeight, maxDimension)
+        return BitmapFactory.decodeFile(
+            file.absolutePath,
+            BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        )
+    }
+
+    private fun calculateInSampleSize(width: Int, height: Int, maxDimension: Int): Int {
+        var inSampleSize = 1
+        if (height > maxDimension || width > maxDimension) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while (halfHeight / inSampleSize >= maxDimension && halfWidth / inSampleSize >= maxDimension) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 
     private fun scaleDown(source: Bitmap, maxDimension: Int): Bitmap {

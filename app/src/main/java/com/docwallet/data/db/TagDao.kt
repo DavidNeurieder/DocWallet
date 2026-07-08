@@ -19,6 +19,9 @@ interface TagDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(tag: Tag)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertOrIgnore(tag: Tag)
+
     @Update
     suspend fun update(tag: Tag)
 

@@ -6,7 +6,9 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,12 +21,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,14 +49,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.docwallet.data.AppPreferencesStore
+import com.docwallet.domain.BackupProgress
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,28 +69,37 @@ import java.util.Locale
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onCollectionsClick: () -> Unit = {},
-    onTagsClick: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val currentPassword by viewModel.currentPassword.collectAsState()
     val newPassword by viewModel.newPassword.collectAsState()
     val confirmPassword by viewModel.confirmPassword.collectAsState()
     val message by viewModel.message.collectAsState()
+    val exportVaultPassword by viewModel.exportVaultPassword.collectAsState()
+    val importVaultPassword by viewModel.importVaultPassword.collectAsState()
+    val showExportPasswordDialog by viewModel.showExportPasswordDialog.collectAsState()
+    val showImportPasswordDialog by viewModel.showImportPasswordDialog.collectAsState()
+    val backupProgress by viewModel.backupProgress.collectAsState()
+
+    val isBackupInProgress = backupProgress != null
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    var screenshotsEnabled by remember { mutableStateOf(AppPreferencesStore.isScreenshotsEnabled(context)) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
-        uri?.let { viewModel.exportBackup(it) }
+        uri?.let { viewModel.onExportConfirmed(it) }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        uri?.let { viewModel.importBackup(it) }
+        uri?.let {
+            viewModel.pendingImportUri.value = it
+            viewModel.showImportPasswordDialog.value = true
+        }
     }
 
     LaunchedEffect(message) {
@@ -89,6 +107,103 @@ fun SettingsScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    // Export password dialog
+    if (showExportPasswordDialog) {
+        var exportPasswordVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelExport() },
+            title = { Text("Encrypt Backup") },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter your vault password to encrypt this backup.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = exportVaultPassword,
+                        onValueChange = { viewModel.exportVaultPassword.value = it },
+                        label = { Text("Vault password") },
+                        singleLine = true,
+                        visualTransformation = if (exportPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { exportPasswordVisible = !exportPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (exportPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (exportPasswordVisible) "Hide" else "Show",
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val dateStr = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                    exportLauncher.launch("DocWallet-$dateStr.docwallet-backup")
+                }) {
+                    Text("Export")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelExport() }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    // Import password dialog
+    if (showImportPasswordDialog) {
+        var importPasswordVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelImport() },
+            title = { Text("Decrypt Backup") },
+            text = {
+                Column {
+                    Text(
+                        text = "The passkey of the vault that created this backup is needed to decrypt it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = importVaultPassword,
+                        onValueChange = { viewModel.importVaultPassword.value = it },
+                        label = { Text("Vault password") },
+                        singleLine = true,
+                        visualTransformation = if (importPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { importPasswordVisible = !importPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (importPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (importPasswordVisible) "Hide" else "Show",
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.onImportConfirmed() }) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelImport() }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -275,21 +390,6 @@ fun SettingsScreen(
                             Text("Change Password")
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Divider()
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        TextButton(
-                            onClick = { viewModel.disablePassword() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Text("Disable Password")
-                        }
                     }
                 }
             }
@@ -307,10 +407,10 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     OutlinedButton(
                         onClick = {
-                            val dateStr = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-                            exportLauncher.launch("DocWallet-$dateStr.docwallet-backup")
+                            viewModel.showExportPasswordDialog.value = true
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBackupInProgress,
                     ) {
                         Text("Export Backup")
                     }
@@ -319,7 +419,9 @@ fun SettingsScreen(
 
                     OutlinedButton(
                         onClick = {
-                            importLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                            if (!isBackupInProgress) {
+                                importLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -328,9 +430,42 @@ fun SettingsScreen(
                 }
             }
 
+            if (isBackupInProgress) {
+                backupProgress?.let { progress ->
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                        ),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = progress.phase,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { progress.fraction },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (progress.detail.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = progress.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
-            SectionHeader("Management")
+            SectionHeader("Privacy")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -339,20 +474,22 @@ fun SettingsScreen(
                 ),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    OutlinedButton(
-                        onClick = onCollectionsClick,
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Collections")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = onTagsClick,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Tags")
+                        Text(
+                            text = "Allow screenshots",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Switch(
+                            checked = screenshotsEnabled,
+                            onCheckedChange = { enabled ->
+                                screenshotsEnabled = enabled
+                                AppPreferencesStore.setScreenshotsEnabled(context, enabled)
+                            },
+                        )
                     }
                 }
             }

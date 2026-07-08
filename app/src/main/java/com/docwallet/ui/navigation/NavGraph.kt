@@ -3,11 +3,12 @@ package com.docwallet.ui.navigation
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.docwallet.ui.collection.CollectionScreen
 import com.docwallet.ui.library.LibraryScreen
-import com.docwallet.ui.search.SearchScreen
 import com.docwallet.ui.settings.SettingsScreen
 import com.docwallet.ui.tag.TagScreen
 import com.docwallet.ui.unlock.PasswordSetupScreen
@@ -18,13 +19,13 @@ object Routes {
     const val UNLOCK = "unlock"
     const val PASSWORD_SETUP = "password_setup"
     const val LIBRARY = "library"
-    const val VIEWER = "viewer/{documentId}"
+    const val VIEWER = "viewer/{documentId}?isNewNote={isNewNote}&pageNumber={pageNumber}"
     const val SETTINGS = "settings"
-    const val SEARCH = "search"
     const val COLLECTIONS = "collections"
     const val TAGS = "tags"
 
-    fun viewer(documentId: String) = "viewer/$documentId"
+    fun viewer(documentId: String, pageNumber: Int = -1) = "viewer/$documentId?pageNumber=$pageNumber"
+    fun newNote() = "viewer/${java.util.UUID.randomUUID()}?isNewNote=true"
 }
 
 @Composable
@@ -61,11 +62,12 @@ fun DocWalletNavGraph(
         composable(Routes.LIBRARY) {
             LibraryScreen(
                 onDocumentClick = { navController.navigate(Routes.viewer(it)) },
+                onDocumentClickWithPage = { docId, pageNumber ->
+                    navController.navigate(Routes.viewer(docId, pageNumber))
+                },
                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
-                onSearchClick = { navController.navigate(Routes.SEARCH) },
                 onNewNoteClick = {
-                    val newId = java.util.UUID.randomUUID().toString()
-                    navController.navigate(Routes.viewer(newId))
+                    navController.navigate(Routes.newNote())
                 },
                 pendingImportUris = pendingImportUris,
                 onPendingImportConsumed = onPendingImportConsumed,
@@ -86,19 +88,20 @@ fun DocWalletNavGraph(
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onCollectionsClick = { navController.navigate(Routes.COLLECTIONS) },
-                onTagsClick = { navController.navigate(Routes.TAGS) },
             )
         }
-        composable(Routes.SEARCH) {
-            SearchScreen(
-                onDocumentClick = { navController.navigate(Routes.viewer(it)) },
-                onBack = { navController.popBackStack() },
-            )
-        }
-        composable(Routes.VIEWER) { backStackEntry ->
+        composable(
+            Routes.VIEWER,
+            arguments = listOf(
+                navArgument("documentId") { type = NavType.StringType },
+                navArgument("isNewNote") { type = NavType.BoolType; defaultValue = false },
+                navArgument("pageNumber") { type = NavType.IntType; defaultValue = -1 },
+            ),
+        ) { backStackEntry ->
             ViewerScreen(
                 documentId = backStackEntry.arguments?.getString("documentId") ?: "",
+                isNewNote = backStackEntry.arguments?.getBoolean("isNewNote") ?: false,
+                targetPage = backStackEntry.arguments?.getInt("pageNumber") ?: -1,
                 onBack = { navController.popBackStack() },
                 onDocumentNotFound = { navController.popBackStack() },
             )

@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.docwallet.data.model.Document
+import com.docwallet.vault.database.DatabaseSchema
 import net.sqlcipher.database.SupportFactory
 
 import androidx.room.migration.Migration
@@ -14,7 +15,7 @@ import com.docwallet.data.model.Collection
 import com.docwallet.data.model.DocumentTag
 import com.docwallet.data.model.Tag
 
-@Database(entities = [Document::class, Tag::class, Collection::class, DocumentTag::class], version = 3, exportSchema = false)
+@Database(entities = [Document::class, Tag::class, Collection::class, DocumentTag::class], version = 5, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class DocWalletDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -24,6 +25,16 @@ abstract class DocWalletDatabase : RoomDatabase() {
 
     companion object {
         private const val DB_NAME = "docwallet.db"
+
+        internal val FTS_CALLBACK = object : RoomDatabase.Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                super.onCreate(db)
+                db.execSQL(DatabaseSchema.CREATE_DOCUMENTS_FTS_TABLE)
+                db.execSQL(DatabaseSchema.CREATE_FTS_TRIGGER_INSERT)
+                db.execSQL(DatabaseSchema.CREATE_FTS_TRIGGER_DELETE)
+                db.execSQL(DatabaseSchema.CREATE_FTS_TRIGGER_UPDATE)
+            }
+        }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -70,15 +81,34 @@ abstract class DocWalletDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE documents ADD COLUMN modified_at INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE documents ADD COLUMN is_conflict INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE documents ADD COLUMN conflict_with TEXT")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(DatabaseSchema.CREATE_DOCUMENTS_FTS_TABLE)
+                db.execSQL(DatabaseSchema.CREATE_FTS_TRIGGER_INSERT)
+                db.execSQL(DatabaseSchema.CREATE_FTS_TRIGGER_DELETE)
+                db.execSQL(DatabaseSchema.CREATE_FTS_TRIGGER_UPDATE)
+                db.execSQL(DatabaseSchema.REBUILD_FTS_INDEX)
+            }
+        }
+
         fun create(context: Context, passphrase: ByteArray): DocWalletDatabase {
-            val factory = SupportFactory(passphrase.copyOf(), null, false)
+            val factory = SupportFactory(passphrase, null, false)
             return Room.databaseBuilder(
                 context.applicationContext,
                 DocWalletDatabase::class.java,
                 DB_NAME
             )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addCallback(FTS_CALLBACK)
                 .build()
         }
     }

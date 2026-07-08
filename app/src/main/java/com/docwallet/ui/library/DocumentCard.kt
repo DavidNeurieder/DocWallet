@@ -1,5 +1,7 @@
 package com.docwallet.ui.library
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -30,15 +34,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.docwallet.data.model.Document
-import com.docwallet.data.model.DocumentType
-import java.io.File
+import com.docwallet.vault.model.DocumentType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,6 +53,7 @@ fun DocumentCard(
     document: Document,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
+    thumbnail: ImageBitmap? = null,
 ) {
     Card(
         onClick = onClick,
@@ -63,10 +68,10 @@ fun DocumentCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (document.thumbnailPath != null) {
-                AsyncImage(
-                    model = File(document.thumbnailPath),
-                    contentDescription = document.title,
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail,
+                    contentDescription = "Document thumbnail",
                     modifier = Modifier
                         .size(64.dp)
                         .clip(RoundedCornerShape(8.dp)),
@@ -81,7 +86,7 @@ fun DocumentCard(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).clearAndSetSemantics { }) {
                 Text(
                     text = document.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -94,8 +99,17 @@ fun DocumentCard(
 
                 Text(
                     text = buildString {
-                        append(DocumentType.fromMimeType(document.mimeType).name)
-                        if (document.pageCount > 0) {
+                        val docType = DocumentType.fromMimeType(document.mimeType)
+                        append(docType.name)
+                        if (document.currentPage > 0) {
+                            if (docType == DocumentType.EPUB) {
+                                append(" \u00B7 ${document.currentPage}% read")
+                            } else if (document.pageCount > 0) {
+                                append(" \u00B7 Page ${document.currentPage} of ${document.pageCount}")
+                            }
+                        } else if (docType == DocumentType.EPUB) {
+                            append(" \u00B7 0% read")
+                        } else if (document.pageCount > 0) {
                             append(" \u00B7 ${document.pageCount} pages")
                         }
                         append(" \u00B7 ${formatFileSize(document.fileSize)}")
@@ -108,7 +122,22 @@ fun DocumentCard(
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                RelativeTimestamp(timestamp = document.importedAt)
+                if (document.lastOpenedAt > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Opened ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        RelativeTimestamp(timestamp = document.lastOpenedAt)
+                    }
+                } else {
+                    Text(
+                        text = "Not yet opened",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             IconButton(onClick = onFavoriteClick) {
