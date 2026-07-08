@@ -71,50 +71,55 @@ fun UnlockScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Enter your password to unlock",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (viewModel.isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    strokeWidth = 4.dp,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Unlocking...",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = "Enter your password to unlock",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-            Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-            var passwordVisible by remember { mutableStateOf(false) }
+                var passwordVisible by remember { mutableStateOf(false) }
 
-            OutlinedTextField(
-                value = viewModel.password,
-                onValueChange = { viewModel.onPasswordChange(it) },
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                        )
-                    }
-                },
-                isError = viewModel.error != null,
-                supportingText = viewModel.error?.let { { Text(it) } },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { viewModel.unlock(onUnlocked) }),
-                modifier = Modifier.fillMaxWidth(),
-            )
+                OutlinedTextField(
+                    value = viewModel.password,
+                    onValueChange = { viewModel.onPasswordChange(it) },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            )
+                        }
+                    },
+                    isError = viewModel.error != null,
+                    supportingText = viewModel.error?.let { { Text(it) } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { viewModel.unlock(onUnlocked) }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Button(
-                onClick = { viewModel.unlock(onUnlocked) },
-                enabled = !viewModel.isLoading,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (viewModel.isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
+                Button(
+                    onClick = { viewModel.unlock(onUnlocked) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Unlock")
                 }
             }
