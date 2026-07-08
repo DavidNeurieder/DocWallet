@@ -122,11 +122,15 @@ class EpubReaderActivity : FragmentActivity() {
     companion object {
         private const val EXTRA_FILE_PATH = "epub_file_path"
         private const val EXTRA_DOCUMENT_ID = "document_id"
+        private const val EXTRA_TARGET_SECTION = "target_section"
 
-        fun start(context: Context, filePath: String, documentId: String) {
+        fun start(context: Context, filePath: String, documentId: String, targetSection: Int? = null) {
             val intent = Intent(context, EpubReaderActivity::class.java).apply {
                 putExtra(EXTRA_FILE_PATH, filePath)
                 putExtra(EXTRA_DOCUMENT_ID, documentId)
+                if (targetSection != null) {
+                    putExtra(EXTRA_TARGET_SECTION, targetSection)
+                }
             }
             context.startActivity(intent)
         }
@@ -135,10 +139,12 @@ class EpubReaderActivity : FragmentActivity() {
     @JvmField
     internal var containerId: Int = View.generateViewId()
     private var documentId: String? = null
+    private var targetSection: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         documentId = intent?.getStringExtra(EXTRA_DOCUMENT_ID)
         documentId?.let { SessionStore.saveLastDocumentId(this, it) }
+        targetSection = intent?.getIntExtra(EXTRA_TARGET_SECTION, -1)?.takeIf { it >= 0 }
         val filePath = intent?.getStringExtra(EXTRA_FILE_PATH) ?: run {
             finish()
             return
@@ -162,6 +168,7 @@ class EpubReaderActivity : FragmentActivity() {
                     EpubReaderHost(
                         file = file,
                         documentId = documentId,
+                        targetSection = targetSection,
                         containerId = containerId,
                         activity = this@EpubReaderActivity,
                         onBack = { finish() },
@@ -246,6 +253,7 @@ class EpubReaderActivity : FragmentActivity() {
 private fun EpubReaderHost(
     file: File,
     documentId: String?,
+    targetSection: Int?,
     containerId: Int,
     activity: FragmentActivity,
     onBack: () -> Unit,
@@ -340,6 +348,7 @@ private fun EpubReaderHost(
             document = document,
             containerId = containerId,
             publication = publication,
+            targetSection = targetSection,
             onBack = onBack,
             onToggleFavorite = onToggleFavorite,
         )
@@ -355,6 +364,7 @@ private fun EpubReaderScreen(
     document: Document?,
     containerId: Int,
     publication: Publication?,
+    targetSection: Int?,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
@@ -375,6 +385,16 @@ private fun EpubReaderScreen(
 
     fun navigateBackward() {
         (activity?.supportFragmentManager?.findFragmentById(containerId) as? EpubNavigatorFragment)?.goBackward(true)
+    }
+
+    LaunchedEffect(targetSection, publication) {
+        if (targetSection == null || publication == null) return@LaunchedEffect
+        if (targetSection >= publication.readingOrder.size) return@LaunchedEffect
+        val frag = activity?.supportFragmentManager?.findFragmentById(containerId) as? EpubNavigatorFragment
+        if (frag != null) {
+            val link = publication.readingOrder[targetSection]
+            frag.go(link, true)
+        }
     }
 
     if (showInfoDialog && document != null) {

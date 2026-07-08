@@ -32,6 +32,11 @@ data class DocumentListItem(
     @ColumnInfo(name = "reading_position") val readingPosition: String? = null,
 )
 
+data class SearchResultMatch(
+    val snippet: String,
+    val pageNumber: Int,
+)
+
 data class SearchResultItem(
     val id: String,
     val title: String,
@@ -39,7 +44,18 @@ data class SearchResultItem(
     @ColumnInfo(name = "page_count") val pageCount: Int,
     val author: String,
     @ColumnInfo(name = "thumbnail_path") val thumbnailPath: String?,
-    val snippet: String,
+    val matches: List<SearchResultMatch>,
+)
+
+data class SearchResultWithOffsets(
+    val id: String,
+    val title: String,
+    @ColumnInfo(name = "mime_type") val mimeType: String,
+    @ColumnInfo(name = "page_count") val pageCount: Int,
+    val author: String,
+    @ColumnInfo(name = "thumbnail_path") val thumbnailPath: String?,
+    @ColumnInfo(name = "text_content") val textContent: String,
+    @ColumnInfo(name = "highlight_content") val highlightContent: String,
 )
 
 @Dao
@@ -51,7 +67,7 @@ interface DocumentDao {
     fun searchDocuments(query: SupportSQLiteQuery): Flow<List<DocumentListItem>>
 
     @RawQuery(observedEntities = [Document::class])
-    fun searchDocumentsWithSnippets(query: SupportSQLiteQuery): Flow<List<SearchResultItem>>
+    fun searchDocumentsWithOffsets(query: SupportSQLiteQuery): Flow<List<SearchResultWithOffsets>>
 
     @Query("SELECT * FROM documents ORDER BY imported_at DESC")
     fun getAllDocuments(): Flow<List<Document>>

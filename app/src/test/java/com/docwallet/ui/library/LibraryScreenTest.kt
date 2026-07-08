@@ -13,7 +13,7 @@ import androidx.compose.ui.test.performTextInput
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.db.DocumentListItem
-import com.docwallet.data.db.SearchResultItem
+import com.docwallet.data.db.SearchResultWithOffsets
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -38,7 +38,7 @@ class LibraryScreenTest {
     fun setUp() {
         every { mockApp.documentDao } returns mockDao
         every { mockDao.getDocumentList() } returns flowOf(emptyList())
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(emptyList())
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(emptyList())
         viewModel = LibraryViewModel(mockApp)
     }
 
@@ -48,6 +48,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -62,6 +63,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -77,6 +79,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -91,6 +94,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -107,6 +111,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -121,6 +126,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -132,16 +138,17 @@ class LibraryScreenTest {
 
     @Test
     fun `search shows results inline`() {
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(
             listOf(
-                SearchResultItem(
+                SearchResultWithOffsets(
                     id = "1",
                     title = "Doc One",
                     mimeType = "application/pdf",
                     pageCount = 10,
                     author = "Author",
                     thumbnailPath = null,
-                    snippet = "The quick <b>fox</b> jumps",
+                    textContent = "The quick fox jumps",
+                    highlightContent = "The quick \u0001fox\u0002 jumps",
                 )
             )
         )
@@ -150,6 +157,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )
@@ -165,16 +173,17 @@ class LibraryScreenTest {
 
     @Test
     fun `search clears results on close`() {
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(
             listOf(
-                SearchResultItem(
+                SearchResultWithOffsets(
                     id = "1",
                     title = "Doc One",
                     mimeType = "application/pdf",
                     pageCount = 10,
                     author = "Author",
                     thumbnailPath = null,
-                    snippet = "The quick <b>fox</b> jumps",
+                    textContent = "The quick fox jumps",
+                    highlightContent = "The quick \u0001fox\u0002 jumps",
                 )
             )
         )
@@ -183,6 +192,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     viewModel = viewModel,
                 )

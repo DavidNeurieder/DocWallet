@@ -79,6 +79,7 @@ private val IMPORT_MIME_TYPES = arrayOf(
 @Composable
 fun LibraryScreen(
     onDocumentClick: (String) -> Unit,
+    onDocumentClickWithPage: (String, Int) -> Unit,
     onSettingsClick: () -> Unit,
     onNewNoteClick: () -> Unit = {},
     pendingImportUris: List<Uri> = emptyList(),
@@ -372,6 +373,10 @@ fun LibraryScreen(
                                 onClick = {
                                     viewModel.search("")
                                     onDocumentClick(result.id)
+                                },
+                                onMatchClick = { docId, pageNumber ->
+                                    viewModel.search("")
+                                    onDocumentClickWithPage(docId, pageNumber)
                                 },
                                 thumbnail = thumbnails[result.id],
                             )

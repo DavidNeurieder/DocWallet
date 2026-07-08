@@ -38,7 +38,7 @@ object EpubParser {
         val zip = ZipFile(file)
         try {
             return buildString {
-                for (item in spineItems) {
+                for ((index, item) in spineItems.withIndex()) {
                     val href = if (opfDir.isNotEmpty() && !item.startsWith("/")) "$opfDir$item" else item
                     val entry = zip.getEntry(href) ?: continue
                     val htmlData = zip.getInputStream(entry).readBytes()
@@ -49,6 +49,7 @@ object EpubParser {
                     if (stripped.isNotEmpty()) {
                         appendLine(stripped)
                     }
+                    append("[SECTION=${index + 1}]")
                 }
             }.takeIf { it.isNotBlank() }
         } finally {

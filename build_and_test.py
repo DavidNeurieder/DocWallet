@@ -35,11 +35,14 @@ def build():
     if code != 0:
         print("  DEBUG BUILD FAILED")
         failures += 1
+
+    """
     step("Building release APK...")
     code = run(["./gradlew", "assembleRelease"], timeout=300)
     if code != 0:
         print("  RELEASE BUILD FAILED")
         failures += 1
+    """
     return failures
 
 

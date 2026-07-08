@@ -19,12 +19,12 @@ object Routes {
     const val UNLOCK = "unlock"
     const val PASSWORD_SETUP = "password_setup"
     const val LIBRARY = "library"
-    const val VIEWER = "viewer/{documentId}?isNewNote={isNewNote}"
+    const val VIEWER = "viewer/{documentId}?isNewNote={isNewNote}&pageNumber={pageNumber}"
     const val SETTINGS = "settings"
     const val COLLECTIONS = "collections"
     const val TAGS = "tags"
 
-    fun viewer(documentId: String) = "viewer/$documentId"
+    fun viewer(documentId: String, pageNumber: Int = -1) = "viewer/$documentId?pageNumber=$pageNumber"
     fun newNote() = "viewer/${java.util.UUID.randomUUID()}?isNewNote=true"
 }
 
@@ -62,6 +62,9 @@ fun DocWalletNavGraph(
         composable(Routes.LIBRARY) {
             LibraryScreen(
                 onDocumentClick = { navController.navigate(Routes.viewer(it)) },
+                onDocumentClickWithPage = { docId, pageNumber ->
+                    navController.navigate(Routes.viewer(docId, pageNumber))
+                },
                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
                 onNewNoteClick = {
                     navController.navigate(Routes.newNote())
@@ -92,11 +95,13 @@ fun DocWalletNavGraph(
             arguments = listOf(
                 navArgument("documentId") { type = NavType.StringType },
                 navArgument("isNewNote") { type = NavType.BoolType; defaultValue = false },
+                navArgument("pageNumber") { type = NavType.IntType; defaultValue = -1 },
             ),
         ) { backStackEntry ->
             ViewerScreen(
                 documentId = backStackEntry.arguments?.getString("documentId") ?: "",
                 isNewNote = backStackEntry.arguments?.getBoolean("isNewNote") ?: false,
+                targetPage = backStackEntry.arguments?.getInt("pageNumber") ?: -1,
                 onBack = { navController.popBackStack() },
                 onDocumentNotFound = { navController.popBackStack() },
             )

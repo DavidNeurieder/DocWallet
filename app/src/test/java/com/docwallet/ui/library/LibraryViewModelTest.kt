@@ -2,7 +2,7 @@ package com.docwallet.ui.library
 
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentDao
-import com.docwallet.data.db.SearchResultItem
+import com.docwallet.data.db.SearchResultWithOffsets
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -63,30 +63,31 @@ class LibraryViewModelTest {
     fun `search results returns documents from DAO`() = runTest(testDispatcher) {
         keepSearchActive()
         val items = listOf(
-            SearchResultItem(
+            SearchResultWithOffsets(
                 id = "1",
                 title = "Doc One",
                 mimeType = "application/pdf",
                 pageCount = 10,
                 author = "Author",
                 thumbnailPath = null,
-                snippet = "The quick <b>fox</b> jumps",
+                textContent = "The quick fox jumps",
+                highlightContent = "The quick \u0001fox\u0002 jumps",
             )
         )
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(items)
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(items)
 
         viewModel.search("fox")
         advanceUntilIdle()
 
         assertEquals(1, viewModel.searchResults.value.size)
         assertEquals("1", viewModel.searchResults.value[0].id)
-        assertTrue(viewModel.searchResults.value[0].snippet.contains("<b>fox</b>"))
+        assertTrue(viewModel.searchResults.value[0].matches[0].snippet.contains("fox"))
     }
 
     @Test
     fun `search results handles DAO exception gracefully`() = runTest(testDispatcher) {
         keepSearchActive()
-        every { mockDao.searchDocumentsWithSnippets(any()) } throws RuntimeException("DB error")
+        every { mockDao.searchDocumentsWithOffsets(any()) } throws RuntimeException("DB error")
 
         viewModel.search("fox")
         advanceUntilIdle()
@@ -98,17 +99,18 @@ class LibraryViewModelTest {
     fun `search results are empty after clearing query`() = runTest(testDispatcher) {
         keepSearchActive()
         val items = listOf(
-            SearchResultItem(
+            SearchResultWithOffsets(
                 id = "1",
                 title = "Doc",
                 mimeType = "text/plain",
                 pageCount = 5,
                 author = "",
                 thumbnailPath = null,
-                snippet = "some <b>text</b>",
+                textContent = "some text",
+                highlightContent = "some \u0001text\u0002",
             )
         )
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(items)
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(items)
 
         viewModel.search("text")
         advanceUntilIdle()
@@ -122,24 +124,25 @@ class LibraryViewModelTest {
     @Test
     fun `search results are updated on new query`() = runTest(testDispatcher) {
         keepSearchActive()
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(emptyList())
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(emptyList())
 
         viewModel.search("fox")
         advanceUntilIdle()
         assertTrue(viewModel.searchResults.value.isEmpty())
 
         val items = listOf(
-            SearchResultItem(
+            SearchResultWithOffsets(
                 id = "2",
                 title = "Rabbit Facts",
                 mimeType = "application/pdf",
                 pageCount = 3,
                 author = "Nature",
                 thumbnailPath = null,
-                snippet = "the quick <b>rabbit</b>",
+                textContent = "the quick rabbit",
+                highlightContent = "the quick \u0001rabbit\u0002",
             )
         )
-        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(items)
+        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(items)
 
         viewModel.search("rabbit")
         advanceUntilIdle()

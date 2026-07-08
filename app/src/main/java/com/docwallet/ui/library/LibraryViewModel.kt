@@ -12,6 +12,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentListItem
 import com.docwallet.data.db.SearchResultItem
+import com.docwallet.data.db.SearchResultMatch
+import com.docwallet.data.db.SearchResultWithOffsets
 import com.docwallet.data.model.Document
 import com.docwallet.vault.model.DocumentType
 import com.docwallet.ui.common.ThumbnailCache
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -134,10 +137,10 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     .split("\\s+".toRegex())
                     .filter { it.isNotBlank() }
                     .joinToString(" ") { "${it}*" }
-                (try {
-                    documentDao.searchDocumentsWithSnippets(
+                ((try {
+                    documentDao.searchDocumentsWithOffsets(
                         SimpleSQLiteQuery(
-                            "SELECT d.id, d.title, d.mime_type, d.page_count, d.author, d.thumbnail_path, highlight(documents_fts, 3, '<b>', '</b>') AS snippet FROM documents d INNER JOIN documents_fts fts ON d.rowid = fts.rowid WHERE documents_fts MATCH ? ORDER BY rank",
+                            "SELECT d.id, d.title, d.mime_type, d.page_count, d.author, d.thumbnail_path, d.text_content, highlight(documents_fts, 3, '\u0001', '\u0002') AS highlight_content FROM documents d INNER JOIN documents_fts fts ON d.rowid = fts.rowid WHERE documents_fts MATCH ? ORDER BY rank",
                             arrayOf(sanitized)
                         )
                     )
@@ -145,6 +148,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     flowOf(emptyList())
                 }).catch { _ ->
                     emit(emptyList())
+                }).map { results ->
+                    results.map { row -> row.toSearchResultItem() }
                 }
             }
         }
@@ -265,5 +270,67 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun SearchResultWithOffsets.toSearchResultItem(): SearchResultItem {
+        val matches = parseHighlight(highlightContent, textContent)
+        return SearchResultItem(
+            id = id,
+            title = title,
+            mimeType = mimeType,
+            pageCount = pageCount,
+            author = author,
+            thumbnailPath = thumbnailPath,
+            matches = matches.take(10),
+        )
+    }
+
+    private fun parseHighlight(highlightContent: String, textContent: String): List<SearchResultMatch> {
+        if (highlightContent.isBlank()) return emptyList()
+        val matchList = mutableListOf<SearchResultMatch>()
+        var rawOffset = 0
+        var matchStart = -1
+        for (ch in highlightContent) {
+            when (ch) {
+                '\u0001' -> matchStart = rawOffset
+                '\u0002' -> {
+                    if (matchStart >= 0) {
+                        val snippet = extractSnippet(textContent, matchStart, rawOffset)
+                        if (snippet.isNotBlank()) {
+                            val cleaned = stripMarkers(snippet)
+                            val pageNumber = extractPageNumber(textContent, matchStart)
+                            matchList.add(SearchResultMatch(snippet = cleaned, pageNumber = pageNumber))
+                        }
+                        matchStart = -1
+                    }
+                }
+                else -> rawOffset++
+            }
+        }
+        return matchList
+    }
+
+    private fun extractSnippet(text: String, startOffset: Int, endOffset: Int): String {
+        val contextBefore = 120
+        val contextAfter = 120
+        val snippetStart = (startOffset - contextBefore).coerceAtLeast(0)
+        val snippetEnd = (endOffset + contextAfter).coerceAtMost(text.length)
+        return text.substring(snippetStart, snippetEnd)
+    }
+
+    private fun stripMarkers(text: String): String {
+        return text.replace(Regex("\\[PAGE=\\d+\\]"), "")
+            .replace(Regex("\\[SECTION=\\d+\\]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun extractPageNumber(text: String, offset: Int): Int {
+        val before = text.substring(0, offset.coerceAtMost(text.length))
+        val pageMatches = Regex("\\[PAGE=(\\d+)\\]").findAll(before)
+        val sectionMatches = Regex("\\[SECTION=(\\d+)\\]").findAll(before)
+        val lastPage = pageMatches.lastOrNull()?.groupValues?.get(1)?.toIntOrNull()
+        val lastSection = sectionMatches.lastOrNull()?.groupValues?.get(1)?.toIntOrNull()
+        return lastPage ?: lastSection ?: 0
     }
 }

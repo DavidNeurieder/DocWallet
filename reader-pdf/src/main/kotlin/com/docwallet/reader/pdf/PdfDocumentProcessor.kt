@@ -38,6 +38,7 @@ class PdfDocumentProcessor : DocumentProcessor {
                     } finally {
                         page.destroy()
                     }
+                    append("[PAGE=${i + 1}]")
                 }
             }.takeIf { it.isNotBlank() }
 

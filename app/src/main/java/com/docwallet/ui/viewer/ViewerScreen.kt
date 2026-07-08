@@ -66,6 +66,7 @@ import com.docwallet.ui.common.EmptyState
 fun ViewerScreen(
     documentId: String,
     isNewNote: Boolean = false,
+    targetPage: Int = -1,
     onBack: () -> Unit,
     viewModel: ViewerViewModel = viewModel(),
     onDocumentNotFound: () -> Unit = {},
@@ -373,13 +374,18 @@ fun ViewerScreen(
                         DocumentType.PDF -> PdfViewer(
                             file = file,
                             document = doc,
-                            initialPage = doc.currentPage,
+                            initialPage = if (targetPage >= 0) targetPage else doc.currentPage,
                             onPageChanged = viewModel::saveReadingPosition,
                             pdfPreferences = pdfPreferences.value,
                         )
                         DocumentType.EPUB -> {
                             LaunchedEffect(file) {
-                                EpubReaderActivity.start(context, file.absolutePath, doc.id)
+                                EpubReaderActivity.start(
+                                    context = context,
+                                    filePath = file.absolutePath,
+                                    documentId = doc.id,
+                                    targetSection = if (targetPage >= 0) targetPage else null,
+                                )
                                 onBack()
                             }
                         }

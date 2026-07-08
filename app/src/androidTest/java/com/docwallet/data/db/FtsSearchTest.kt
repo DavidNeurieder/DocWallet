@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -25,8 +26,8 @@ class FtsSearchTest {
     private val ftsQuery =
         "SELECT d.id, d.title, d.file_name, d.mime_type, d.file_size, d.page_count, d.author, d.description, d.thumbnail_path, d.imported_at, d.last_opened_at, d.is_favorite, d.collection_id, d.barcode_format, d.barcode_value, d.current_page, d.reading_position FROM documents d INNER JOIN documents_fts fts ON d.rowid = fts.rowid WHERE documents_fts MATCH ? ORDER BY rank"
 
-    private val snippetQuery =
-        "SELECT d.id, d.title, d.mime_type, d.page_count, d.author, d.thumbnail_path, highlight(documents_fts, 3, '<b>', '</b>') AS snippet FROM documents d INNER JOIN documents_fts fts ON d.rowid = fts.rowid WHERE documents_fts MATCH ? ORDER BY rank"
+    private val highlightQuery =
+        "SELECT d.id, d.title, d.mime_type, d.page_count, d.author, d.thumbnail_path, d.text_content, highlight(documents_fts, 3, '\u0001', '\u0002') AS highlight_content FROM documents d INNER JOIN documents_fts fts ON d.rowid = fts.rowid WHERE documents_fts MATCH ? ORDER BY rank"
 
     @Before
     fun setUp() {
@@ -233,7 +234,7 @@ class FtsSearchTest {
     }
 
     @Test
-    fun snippetReturnsHighlightedTextContent() = runBlocking {
+    fun highlightReturnsContentWithMarkers() = runBlocking {
         dao.insert(
             Document(
                 id = "1",
@@ -242,17 +243,19 @@ class FtsSearchTest {
             )
         )
 
-        val results = dao.searchDocumentsWithSnippets(
-            SimpleSQLiteQuery(snippetQuery, arrayOf("fox*"))
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
         ).first()
 
         assertEquals(1, results.size)
         assertEquals("1", results[0].id)
-        assertTrue(results[0].snippet.contains("<b>fox</b>"))
+        assertTrue("highlightContent should contain sentinel markers", results[0].highlightContent.contains("\u0001"))
+        assertTrue("highlightContent should contain match text", results[0].highlightContent.contains("fox"))
+        assertEquals("textContent should be present", results[0].textContent, results[0].highlightContent.replace("\u0001", "").replace("\u0002", ""))
     }
 
     @Test
-    fun snippetIsEmptyWhenNoMatch() = runBlocking {
+    fun highlightIsEmptyWhenNoMatch() = runBlocking {
         dao.insert(
             Document(
                 id = "1",
@@ -261,15 +264,15 @@ class FtsSearchTest {
             )
         )
 
-        val results = dao.searchDocumentsWithSnippets(
-            SimpleSQLiteQuery(snippetQuery, arrayOf("zzzzz*"))
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("zzzzz*"))
         ).first()
 
         assertTrue(results.isEmpty())
     }
 
     @Test
-    fun snippetWorksWithTitleMatch() = runBlocking {
+    fun highlightWorksWithTitleMatch() = runBlocking {
         dao.insert(
             Document(
                 id = "1",
@@ -278,8 +281,8 @@ class FtsSearchTest {
             )
         )
 
-        val results = dao.searchDocumentsWithSnippets(
-            SimpleSQLiteQuery(snippetQuery, arrayOf("fox*"))
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
         ).first()
 
         assertEquals(1, results.size)
@@ -287,7 +290,7 @@ class FtsSearchTest {
     }
 
     @Test
-    fun snippetIsOrderedByRelevance() = runBlocking {
+    fun highlightIsOrderedByRelevance() = runBlocking {
         dao.insert(
             Document(
                 id = "1",
@@ -303,8 +306,8 @@ class FtsSearchTest {
             )
         )
 
-        val results = dao.searchDocumentsWithSnippets(
-            SimpleSQLiteQuery(snippetQuery, arrayOf("fox*"))
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
         ).first()
 
         assertEquals(2, results.size)
@@ -312,7 +315,7 @@ class FtsSearchTest {
     }
 
     @Test
-    fun snippetAfterUpdateShowsNewContent() = runBlocking {
+    fun highlightAfterUpdateShowsNewContent() = runBlocking {
         dao.insert(
             Document(
                 id = "1",
@@ -321,8 +324,8 @@ class FtsSearchTest {
             )
         )
 
-        val before = dao.searchDocumentsWithSnippets(
-            SimpleSQLiteQuery(snippetQuery, arrayOf("fox*"))
+        val before = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
         ).first()
         assertTrue(before.isEmpty())
 
@@ -334,12 +337,239 @@ class FtsSearchTest {
             )
         )
 
-        val after = dao.searchDocumentsWithSnippets(
-            SimpleSQLiteQuery(snippetQuery, arrayOf("fox*"))
+        val after = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
         ).first()
 
         assertEquals(1, after.size)
         assertEquals("1", after[0].id)
-        assertTrue(after[0].snippet.contains("<b>fox"))
+        assertTrue("highlightContent should contain sentinel markers", after[0].highlightContent.contains("\u0001"))
+        assertTrue("highlightContent should contain match text", after[0].highlightContent.contains("fox"))
+    }
+
+    @Test
+    fun highlightReturnsMultipleMatches() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Fox Facts",
+                textContent = "A fox is a clever animal. The red fox lives in forests."
+            )
+        )
+
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        val count = results[0].highlightContent.count { it == '\u0001' }
+        assertTrue("Expected at least 2 matches, got $count", count >= 2)
+    }
+
+    @Test
+    fun highlightWithPageMarkers() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Multi-Page Doc",
+                textContent = "This is page one content with the target fox.[PAGE=1]Page two also mentions the fox.[PAGE=2]Page three has different text."
+            )
+        )
+
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        val hl = results[0].highlightContent
+        val text = results[0].textContent
+        assertTrue(hl.contains("\u0001"))
+
+        val markerPositions = mutableListOf<Int>()
+        var searchIdx = 0
+        while (true) {
+            val pos = text.indexOf("[PAGE=", searchIdx)
+            if (pos == -1) break
+            markerPositions.add(pos)
+            searchIdx = pos + 1
+        }
+        assertEquals("Expected 2 page markers", 2, markerPositions.size)
+
+        var rawOffset = 0
+        val matchStarts = mutableListOf<Int>()
+        for (ch in hl) {
+            when (ch) {
+                '\u0001' -> matchStarts.add(rawOffset)
+                '\u0002' -> { }
+                else -> rawOffset++
+            }
+        }
+        assertTrue("Expected at least 2 matches", matchStarts.size >= 2)
+        for (start in matchStarts) {
+            val pageBefore = markerPositions.count { it < start }
+            val expectedPage = pageBefore + 1
+            assertTrue("Match at offset $start should be on page $expectedPage", expectedPage in 1..2)
+        }
+    }
+
+    @Test
+    fun highlightWithSectionMarkers() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Multi-Section EPUB",
+                textContent = "Section one introduction.[SECTION=0]Section two with the fox word.[SECTION=1]Section three also has fox.[SECTION=2]"
+            )
+        )
+
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        val hl = results[0].highlightContent
+        val text = results[0].textContent
+        assertTrue(hl.contains("\u0001"))
+
+        val sectionPositions = mutableListOf<Int>()
+        var searchIdx = 0
+        while (true) {
+            val pos = text.indexOf("[SECTION=", searchIdx)
+            if (pos == -1) break
+            sectionPositions.add(pos)
+            searchIdx = pos + 1
+        }
+        assertEquals("Expected 3 section markers", 3, sectionPositions.size)
+
+        var rawOffset = 0
+        val matchStarts = mutableListOf<Int>()
+        for (ch in hl) {
+            when (ch) {
+                '\u0001' -> matchStarts.add(rawOffset)
+                '\u0002' -> { }
+                else -> rawOffset++
+            }
+        }
+        assertTrue("Expected at least 2 matches", matchStarts.size >= 2)
+        for (start in matchStarts) {
+            val sectionBefore = sectionPositions.count { it < start }
+            assertTrue(
+                "Match at offset $start should be in section $sectionBefore",
+                sectionBefore in 1..2
+            )
+        }
+    }
+
+    @Test
+    fun highlightMultipleMatchesAcrossPages() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Two Page Doc",
+                textContent = "fox on page one.[PAGE=1]fox on page two.[PAGE=2]"
+            )
+        )
+
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        val hl = results[0].highlightContent
+        val text = results[0].textContent
+
+        val pageOnePos = text.indexOf("[PAGE=1]")
+        val pageTwoPos = text.indexOf("[PAGE=2]")
+        assertTrue(pageOnePos >= 0)
+        assertTrue(pageTwoPos > pageOnePos)
+
+        var rawOffset = 0
+        val matchStarts = mutableListOf<Int>()
+        for (ch in hl) {
+            when (ch) {
+                '\u0001' -> matchStarts.add(rawOffset)
+                '\u0002' -> { }
+                else -> rawOffset++
+            }
+        }
+
+        assertEquals("Expected exactly 2 matches", 2, matchStarts.size)
+
+        val first = matchStarts[0]
+        val second = matchStarts[1]
+        assertTrue("First match should be before [PAGE=1] at $pageOnePos", first < pageOnePos)
+        assertTrue(
+            "Second match should be between [PAGE=1] and [PAGE=2]",
+            second in (pageOnePos + 1) until pageTwoPos
+        )
+
+        val firstPage = text.substring(0, pageOnePos).let { before ->
+            Regex("\\[PAGE=\\d+\\]").findAll(before).count() + 1
+        }
+        val secondPage = text.substring(0, second).let { before ->
+            Regex("\\[PAGE=\\d+\\]").findAll(before).count() + 1
+        }
+        assertEquals("First match should be on page 1", 1, firstPage)
+        assertEquals("Second match should be on page 2", 2, secondPage)
+    }
+
+    @Test
+    fun highlightWithoutMarkers() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Old Doc",
+                textContent = "This document has no page markers but still contains the fox."
+            )
+        )
+
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        assertTrue(results[0].highlightContent.contains("\u0001"))
+        assertFalse("textContent should not contain page markers", results[0].textContent.contains("[PAGE="))
+        assertEquals(
+            "highlightContent without markers should equal textContent",
+            results[0].textContent,
+            results[0].highlightContent.replace("\u0001", "").replace("\u0002", "")
+        )
+    }
+
+    @Test
+    fun searchByTextContentWithMarkers() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Marked Doc",
+                textContent = "[PAGE=1]Introduction content.[PAGE=2]The fox is here.[PAGE=3]"
+            )
+        )
+
+        val results = dao.searchDocuments(
+            SimpleSQLiteQuery(ftsQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        assertEquals("1", results[0].id)
+    }
+
+    @Test
+    fun highlightMarkerDoesNotBreakTokenization() = runBlocking {
+        dao.insert(
+            Document(
+                id = "1",
+                title = "Adjacent Markers",
+                textContent = "word[PAGE=1]word fox[PAGE=2]text"
+            )
+        )
+
+        val results = dao.searchDocumentsWithOffsets(
+            SimpleSQLiteQuery(highlightQuery, arrayOf("fox*"))
+        ).first()
+
+        assertEquals(1, results.size)
+        assertTrue(results[0].highlightContent.contains("\u0001"))
     }
 }

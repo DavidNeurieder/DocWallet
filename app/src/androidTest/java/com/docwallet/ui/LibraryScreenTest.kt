@@ -39,6 +39,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                     onNewNoteClick = {},
                 )
@@ -53,6 +54,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -66,6 +68,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -80,6 +83,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -93,6 +97,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
@@ -107,6 +112,7 @@ class LibraryScreenTest {
             MaterialTheme {
                 LibraryScreen(
                     onDocumentClick = {},
+                    onDocumentClickWithPage = { _, _ -> },
                     onSettingsClick = {},
                 )
             }
