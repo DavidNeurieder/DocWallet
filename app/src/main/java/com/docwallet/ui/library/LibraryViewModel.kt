@@ -11,6 +11,7 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentListItem
+import com.docwallet.data.db.SearchResultItem
 import com.docwallet.data.model.Document
 import com.docwallet.vault.model.DocumentType
 import com.docwallet.ui.common.ThumbnailCache
@@ -120,6 +121,29 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             SortOption.RECENTLY_OPENED -> result.sortedByDescending { it.lastOpenedAt }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val searchResults: StateFlow<List<SearchResultItem>> = searchQuery
+        .flatMapLatest { query ->
+            if (query.isBlank()) {
+                flowOf(emptyList())
+            } else {
+                val sanitized = query.trim()
+                    .split("\\s+".toRegex())
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { "${it}*" }
+                try {
+                    documentDao.searchDocumentsWithSnippets(
+                        SimpleSQLiteQuery(
+                            "SELECT d.id, d.title, d.mime_type, d.page_count, d.author, d.thumbnail_path, highlight(documents_fts, 3, '<b>', '</b>') AS snippet FROM documents d INNER JOIN documents_fts fts ON d.rowid = fts.rowid WHERE documents_fts MATCH ? ORDER BY rank",
+                            arrayOf(sanitized)
+                        )
+                    )
+                } catch (_: Exception) {
+                    flowOf(emptyList())
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         viewModelScope.launch {

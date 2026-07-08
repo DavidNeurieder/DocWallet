@@ -32,6 +32,16 @@ data class DocumentListItem(
     @ColumnInfo(name = "reading_position") val readingPosition: String? = null,
 )
 
+data class SearchResultItem(
+    val id: String,
+    val title: String,
+    @ColumnInfo(name = "mime_type") val mimeType: String,
+    @ColumnInfo(name = "page_count") val pageCount: Int,
+    val author: String,
+    @ColumnInfo(name = "thumbnail_path") val thumbnailPath: String?,
+    val snippet: String,
+)
+
 @Dao
 interface DocumentDao {
     @Query("SELECT id, title, file_name, mime_type, file_size, page_count, author, description, thumbnail_path, imported_at, last_opened_at, is_favorite, collection_id, barcode_format, barcode_value, current_page, reading_position FROM documents ORDER BY imported_at DESC")
@@ -39,6 +49,9 @@ interface DocumentDao {
 
     @RawQuery(observedEntities = [Document::class])
     fun searchDocuments(query: SupportSQLiteQuery): Flow<List<DocumentListItem>>
+
+    @RawQuery(observedEntities = [Document::class])
+    fun searchDocumentsWithSnippets(query: SupportSQLiteQuery): Flow<List<SearchResultItem>>
 
     @Query("SELECT * FROM documents ORDER BY imported_at DESC")
     fun getAllDocuments(): Flow<List<Document>>

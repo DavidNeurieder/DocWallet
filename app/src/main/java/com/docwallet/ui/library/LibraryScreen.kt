@@ -36,10 +36,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.TextField
@@ -48,6 +50,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -391,6 +394,66 @@ fun LibraryScreen(
                     document.thumbnailPath?.let { viewModel.loadThumbnail(document.id, it) }
                 }
             }
+    }
+
+    var showSearchSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSearchActive, searchQuery) {
+        showSearchSheet = isSearchActive && searchQuery.isNotBlank()
+    }
+
+    if (showSearchSheet) {
+        val searchResults by viewModel.searchResults.collectAsState()
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        ModalBottomSheet(
+            onDismissRequest = {
+                showSearchSheet = false
+                viewModel.search("")
+            },
+            sheetState = sheetState,
+        ) {
+            Text(
+                text = "Search Results",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            )
+            HorizontalDivider()
+
+            if (searchResults.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "No results found",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(searchResults, key = { it.id }) { result ->
+                        SearchResultCard(
+                            result = result,
+                            onClick = {
+                                showSearchSheet = false
+                                viewModel.search("")
+                                onDocumentClick(result.id)
+                            },
+                            thumbnail = thumbnails[result.id],
+                        )
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -4,13 +4,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasParent
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import com.docwallet.DocWalletApplication
 import com.docwallet.data.db.DocumentDao
 import com.docwallet.data.db.DocumentListItem
+import com.docwallet.data.db.SearchResultItem
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
@@ -35,6 +38,7 @@ class LibraryScreenTest {
     fun setUp() {
         every { mockApp.documentDao } returns mockDao
         every { mockDao.getDocumentList() } returns flowOf(emptyList())
+        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(emptyList())
         viewModel = LibraryViewModel(mockApp)
     }
 
@@ -124,5 +128,62 @@ class LibraryScreenTest {
         }
         composeTestRule.onNodeWithText("No documents yet").assertExists()
         composeTestRule.onNodeWithText("Tap + to add your first document").assertExists()
+    }
+
+    @Test
+    fun `search shows bottom sheet with results`() {
+        every { mockDao.searchDocumentsWithSnippets(any()) } returns flowOf(
+            listOf(
+                SearchResultItem(
+                    id = "1",
+                    title = "Doc One",
+                    mimeType = "application/pdf",
+                    pageCount = 10,
+                    author = "Author",
+                    thumbnailPath = null,
+                    snippet = "The quick <b>fox</b> jumps",
+                )
+            )
+        )
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                LibraryScreen(
+                    onDocumentClick = {},
+                    onSettingsClick = {},
+                    viewModel = viewModel,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
+        composeTestRule.onNode(hasSetTextAction()).performTextInput("fox")
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("Search Results").assertExists()
+        composeTestRule.onNodeWithText("Doc One").assertExists()
+    }
+
+    @Test
+    fun `search clears results on dismiss`() {
+        composeTestRule.setContent {
+            MaterialTheme {
+                LibraryScreen(
+                    onDocumentClick = {},
+                    onSettingsClick = {},
+                    viewModel = viewModel,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Search").performClick()
+        composeTestRule.onNode(hasSetTextAction()).performTextInput("fox")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Search Results").assertExists()
+
+        composeTestRule.onNodeWithContentDescription("Close search").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("DocWallet").assertExists()
     }
 }
