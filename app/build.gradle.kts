@@ -93,6 +93,7 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.splash.screen)
     implementation(libs.lifecycle.runtime)
+    implementation(libs.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.process)
     implementation(libs.navigation.compose)

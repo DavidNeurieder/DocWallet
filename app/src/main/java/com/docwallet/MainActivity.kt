@@ -1,29 +1,53 @@
 package com.docwallet
 
+import android.app.Activity
+import android.app.KeyguardManager
 import android.content.Intent
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import android.content.Context
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.compose.rememberNavController
 import com.docwallet.data.AppPreferencesStore
+import com.docwallet.data.PinLockManager
 import com.docwallet.ui.navigation.DocWalletNavGraph
 import com.docwallet.ui.navigation.Routes
 
@@ -71,14 +95,18 @@ class MainActivity : ComponentActivity() {
                         isReady = true
                     }
 
-                    if (isReady) {
-                        DocWalletNavGraph(
-                            navController = navController,
-                            startDestination = startDestination,
-                            onUnlocked = { /* handled in NavGraph */ },
-                            pendingImportUris = pendingShareUris.value,
-                            onPendingImportConsumed = { pendingShareUris.value = emptyList() },
-                        )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (isReady) {
+                            DocWalletNavGraph(
+                                navController = navController,
+                                startDestination = startDestination,
+                                onUnlocked = { /* handled in NavGraph */ },
+                                pendingImportUris = pendingShareUris.value,
+                                onPendingImportConsumed = { pendingShareUris.value = emptyList() },
+                            )
+                        }
+
+                        PinUnlockOverlay()
                     }
                 }
             }
@@ -130,6 +158,75 @@ class MainActivity : ComponentActivity() {
                         ?: emptyList()
                 }
                 pendingShareUris.value = uris.filter { it.scheme == "content" }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PinUnlockOverlay() {
+    if (!PinLockManager.isLocked) return
+
+    val context = LocalContext.current
+    val keyguardManager = remember { context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager }
+
+    val pinLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            PinLockManager.unlock()
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && PinLockManager.isLocked) {
+                if (keyguardManager.isKeyguardSecure) {
+                    val intent = keyguardManager.createConfirmDeviceCredentialIntent("Unlock DocWallet", null)
+                    if (intent != null) {
+                        pinLauncher.launch(intent)
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "DocWallet",
+                style = MaterialTheme.typography.headlineLarge,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            if (keyguardManager.isKeyguardSecure) {
+                Text(
+                    text = "App is locked",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = {
+                    val intent = keyguardManager.createConfirmDeviceCredentialIntent("Unlock DocWallet", null)
+                    if (intent != null) {
+                        pinLauncher.launch(intent)
+                    }
+                }) {
+                    Text("Unlock")
+                }
+            } else {
+                Text(
+                    text = "Set a device lock screen in your phone settings to use PIN lock",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }

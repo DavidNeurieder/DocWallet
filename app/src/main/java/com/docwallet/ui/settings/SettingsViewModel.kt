@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.docwallet.DocWalletApplication
+import com.docwallet.data.AppPreferencesStore
 import com.docwallet.data.encryption.EncryptionManager
 import com.docwallet.data.model.Document
 import com.docwallet.domain.BackupProgress
@@ -75,6 +76,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun deselectAllDocuments() {
         _selectedDocIds.value = emptySet()
+    }
+
+    val isPinEnabled: Boolean
+        get() = AppPreferencesStore.isPinEnabled(getApplication())
+
+    fun setPinEnabled(enabled: Boolean) {
+        AppPreferencesStore.setPinEnabled(getApplication(), enabled)
     }
 
     fun onExportDocumentsConfirmed(uri: Uri) {

@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import android.util.Log
+import com.docwallet.data.AppPreferencesStore
+import com.docwallet.data.PinLockManager
 import com.docwallet.data.db.CollectionDao
 import com.docwallet.data.db.DocWalletDatabase
 import com.docwallet.data.db.DocumentDao
@@ -85,7 +87,7 @@ class DocWalletApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         encryptionManager = EncryptionManager(this)
-        registerActivityLifecycleCallbacks(ActivityLifecycleLockCallbacks(encryptionManager))
+        registerActivityLifecycleCallbacks(ActivityLifecycleLockCallbacks(encryptionManager, this))
     }
 
     companion object {
@@ -94,7 +96,8 @@ class DocWalletApplication : Application() {
 }
 
 private class ActivityLifecycleLockCallbacks(
-    private val encryptionManager: EncryptionManager
+    private val encryptionManager: EncryptionManager,
+    private val app: DocWalletApplication,
 ) : Application.ActivityLifecycleCallbacks {
     private val activityCount = AtomicInteger(0)
 
@@ -104,7 +107,11 @@ private class ActivityLifecycleLockCallbacks(
 
     override fun onActivityStopped(activity: Activity) {
         if (activityCount.decrementAndGet() <= 0) {
-            encryptionManager.lock()
+            if (AppPreferencesStore.isPinEnabled(app)) {
+                PinLockManager.lock()
+            } else {
+                encryptionManager.lock()
+            }
         }
     }
 
