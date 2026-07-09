@@ -44,7 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.LifecycleOwner
 import androidx.navigation.compose.rememberNavController
 import com.docwallet.data.AppPreferencesStore
 import com.docwallet.data.PinLockManager
@@ -185,8 +185,8 @@ private fun PinUnlockOverlay() {
         }
     }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    val lifecycle = (context as LifecycleOwner).lifecycle
+    DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && PinLockManager.isLocked) {
                 if (keyguardManager.isKeyguardSecure) {
@@ -197,9 +197,9 @@ private fun PinUnlockOverlay() {
                 }
             }
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
+        lifecycle.addObserver(observer)
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+            lifecycle.removeObserver(observer)
         }
     }
 
