@@ -1,6 +1,6 @@
 # LibreCrate
 
-**Version 0.2.0**
+**Version 0.3.0**
 
 Encrypted document vault for Android — stores, views, organizes, and searches PDFs, EPUBs, PKPass files, comic archives (CBZ/CBR), images, and personal notes. All documents are encrypted at rest with optional password protection and zero network access.
 
