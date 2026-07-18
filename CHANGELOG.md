@@ -2,9 +2,20 @@
 
 ## 0.3.0 (2026-07-18)
 
-### Features
+### Fixes
 
-- Initial release of the new version
+- **Backup import crash**: Fixed crash when importing backup into existing database — `reopenDatabase()` no longer closes the old database unnecessarily
+- **Backup import database corruption**: Fixed "file is not a database" error after import by deferring database recreation and hardening WAL/SHM cleanup
+- **Startup crash after failed import**: `initializeDatabase()` now force-opens the database inside a try/catch block, catching open errors early instead of crashing on the first DAO call
+- **SettingsScreenTest reliability**: Fixed duplicate `SectionHeader("Security")` ambiguity
+- **EpubReaderInstrumentedTest robustness**: Wrapped `onActivity` in try/catch to handle flaky composition
+- **PIN lock default**: Changed to disabled (`false`) — no longer enabled by default on fresh install
+
+### Technical
+
+- Added full-branch logging to `BackupManager.restoreContents()` (Branch A/B/C selection)
+- Added `backupUninstallReinstallImportCloseReopen` instrumented test covering full backup → wipe → restore → close → reopen cycle
+- Bumped to versionCode 3
 
 ## 0.2.0 (2026-07-08)
 

@@ -75,8 +75,8 @@ sdk.dir=/path/to/Android/Sdk
 ./gradlew connectedDebugAndroidTest
 ```
 
-- 119+ unit tests
-- 46+ instrumented tests
+- 120+ unit tests
+- 47+ instrumented tests
 
 ## AllowedAPKSigningKeys to verify Releases:
 
