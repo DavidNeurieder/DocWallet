@@ -1,0 +1,3 @@
+• Fixed search ANR when typing common queries
+• Fixed EPUB crash when opening from search results
+• Performance improvements for search result processing
