@@ -7,9 +7,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.librecrate.app.LibreCrateApplication
-import com.librecrate.app.data.db.DocumentDao
-import com.librecrate.app.data.encryption.EncryptionManager
 import com.librecrate.app.data.model.Document
+import com.librecrate.app.data.vault.VaultRepository
 import io.mockk.coEvery
 import io.mockk.clearAllMocks
 import io.mockk.every
@@ -34,15 +33,13 @@ class ExportScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private val mockDao = mockk<DocumentDao>(relaxed = true)
-    private val mockEncryptionManager = mockk<EncryptionManager>(relaxed = true)
+    private val mockVault = mockk<VaultRepository>(relaxed = true)
     private val mockApp = mockk<LibreCrateApplication>(relaxed = true)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        every { mockApp.documentDao } returns mockDao
-        every { mockApp.encryptionManager } returns mockEncryptionManager
+        every { mockApp.vaultRepository } returns mockVault
     }
 
     @After
@@ -53,7 +50,7 @@ class ExportScreenTest {
 
     @Test
     fun `screen displays Export Documents title`() {
-        coEvery { mockDao.getAllDocumentsOnce() } returns emptyList()
+        coEvery { mockVault.listDocuments() } returns emptyList()
         val viewModel = ExportViewModel(mockApp)
 
         composeTestRule.setContent {
@@ -66,7 +63,7 @@ class ExportScreenTest {
 
     @Test
     fun `search icon exists`() {
-        coEvery { mockDao.getAllDocumentsOnce() } returns emptyList()
+        coEvery { mockVault.listDocuments() } returns emptyList()
         val viewModel = ExportViewModel(mockApp)
 
         composeTestRule.setContent {
@@ -79,7 +76,7 @@ class ExportScreenTest {
 
     @Test
     fun `search activates on search icon click`() {
-        coEvery { mockDao.getAllDocumentsOnce() } returns emptyList()
+        coEvery { mockVault.listDocuments() } returns emptyList()
         val viewModel = ExportViewModel(mockApp)
 
         composeTestRule.setContent {
@@ -93,7 +90,7 @@ class ExportScreenTest {
 
     @Test
     fun `empty state displayed when no documents`() {
-        coEvery { mockDao.getAllDocumentsOnce() } returns emptyList()
+        coEvery { mockVault.listDocuments() } returns emptyList()
         val viewModel = ExportViewModel(mockApp)
 
         composeTestRule.setContent {
@@ -106,7 +103,7 @@ class ExportScreenTest {
 
     @Test
     fun `back button exists`() {
-        coEvery { mockDao.getAllDocumentsOnce() } returns emptyList()
+        coEvery { mockVault.listDocuments() } returns emptyList()
         val viewModel = ExportViewModel(mockApp)
 
         composeTestRule.setContent {
@@ -119,7 +116,7 @@ class ExportScreenTest {
 
     @Test
     fun `export button is disabled when nothing selected`() {
-        coEvery { mockDao.getAllDocumentsOnce() } returns listOf(
+        coEvery { mockVault.listDocuments() } returns listOf(
             Document(id = "1", title = "Doc One", fileName = "one.pdf"),
         )
         val viewModel = ExportViewModel(mockApp)

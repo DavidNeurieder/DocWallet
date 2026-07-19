@@ -2,12 +2,11 @@ package com.librecrate.app.ui.export
 
 import android.net.Uri
 import com.librecrate.app.LibreCrateApplication
-import com.librecrate.app.data.db.DocumentDao
-import com.librecrate.app.data.encryption.EncryptionManager
+import com.librecrate.app.data.vault.VaultRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -30,17 +29,15 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class ExportViewModelTest {
 
-    private val mockDao = mockk<DocumentDao>(relaxed = true)
-    private val mockEncryptionManager = mockk<EncryptionManager>(relaxed = true)
+    private val mockVault = mockk<VaultRepository>(relaxed = true)
     private val mockApp = mockk<LibreCrateApplication>(relaxed = true)
     private lateinit var viewModel: ExportViewModel
 
     @Before
     fun setUp() {
         Dispatchers.setMain(StandardTestDispatcher())
-        every { mockApp.documentDao } returns mockDao
-        every { mockApp.encryptionManager } returns mockEncryptionManager
-        coEvery { mockDao.getAllDocumentsOnce() } returns emptyList()
+        every { mockApp.vaultRepository } returns mockVault
+        coEvery { mockVault.listDocuments() } returns emptyList()
         viewModel = ExportViewModel(mockApp)
     }
 
@@ -132,9 +129,9 @@ class ExportViewModelTest {
     }
 
     @Test
-    fun `onExportDocumentsConfirmed with empty selection does not call encryption`() {
+    fun `onExportDocumentsConfirmed with empty selection does not call vault`() {
         viewModel.onExportDocumentsConfirmed(mockk<Uri>())
-        verify(exactly = 0) { mockEncryptionManager.getMasterKeyForSession() }
+        coVerify(exactly = 0) { mockVault.exportDocumentFile(any()) }
     }
 
     @Test
@@ -148,7 +145,6 @@ class ExportViewModelTest {
     @Test
     fun `isExporting set synchronously when export starts with selection`() {
         viewModel.toggleDocumentSelection("1")
-        every { mockEncryptionManager.getMasterKeyForSession() } returns byteArrayOf(1, 2, 3)
         every { mockApp.cacheDir } returns java.io.File(System.getProperty("java.io.tmpdir"))
         every { mockApp.contentResolver } returns mockk(relaxed = true)
 

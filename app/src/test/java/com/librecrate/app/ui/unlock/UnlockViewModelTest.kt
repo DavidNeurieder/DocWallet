@@ -1,5 +1,6 @@
 package com.librecrate.app.ui.unlock
 
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -25,7 +26,7 @@ class UnlockViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val mockEncryptionManager = mockk<EncryptionManager>(relaxed = true)
-    private val mockApp = mockk<LibreCrateApplication>()
+    private val mockApp = mockk<LibreCrateApplication>(relaxed = true)
     private lateinit var viewModel: UnlockViewModel
 
     @Before
@@ -73,6 +74,7 @@ class UnlockViewModelTest {
     @Test
     fun `unlock with correct password calls onSuccess`() = runTest(testDispatcher) {
         every { mockEncryptionManager.verifyPassword(any()) } returns true
+        coEvery { mockApp.openVault() } returns true
         var successCalled = false
         viewModel.onPasswordChange("correct")
         viewModel.unlock { successCalled = true }

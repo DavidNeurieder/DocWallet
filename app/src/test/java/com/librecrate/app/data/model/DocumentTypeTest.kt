@@ -1,6 +1,5 @@
 package com.librecrate.app.data.model
 
-import com.librecrate.app.vault.model.DocumentType
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -100,7 +99,7 @@ class DocumentTypeTest {
 
     @Test
     fun `IMAGE extensions list contains all expected formats`() {
-        val expected = listOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+        val expected = listOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
         assertEquals(expected, DocumentType.IMAGE.extensions)
     }
 }

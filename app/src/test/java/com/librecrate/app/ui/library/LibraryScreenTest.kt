@@ -1,9 +1,6 @@
 package com.librecrate.app.ui.library
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -11,12 +8,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.librecrate.app.LibreCrateApplication
-import com.librecrate.app.data.db.DocumentDao
-import com.librecrate.app.data.db.DocumentListItem
-import com.librecrate.app.data.db.SearchResultWithOffsets
+import com.librecrate.app.data.model.Document
+import com.librecrate.app.data.vault.VaultRepository
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -30,15 +26,16 @@ class LibraryScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private val mockDao = mockk<DocumentDao>(relaxed = true)
+    private val documentsFlow = MutableStateFlow<List<Document>>(emptyList())
+    private val mockVault = mockk<VaultRepository>(relaxed = true)
     private val mockApp = mockk<LibreCrateApplication>(relaxed = true)
     private lateinit var viewModel: LibraryViewModel
 
     @Before
     fun setUp() {
-        every { mockApp.documentDao } returns mockDao
-        every { mockDao.getDocumentList() } returns flowOf(emptyList())
-        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(emptyList())
+        documentsFlow.value = emptyList()
+        every { mockApp.vaultRepository } returns mockVault
+        every { mockVault.documents } returns documentsFlow
         viewModel = LibraryViewModel(mockApp)
     }
 
@@ -138,18 +135,11 @@ class LibraryScreenTest {
 
     @Test
     fun `search shows results inline`() {
-        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(
-            listOf(
-                SearchResultWithOffsets(
-                    id = "1",
-                    title = "Doc One",
-                    mimeType = "application/pdf",
-                    pageCount = 10,
-                    author = "Author",
-                    thumbnailPath = null,
-                    textContent = "The quick fox jumps",
-                    highlightContent = "The quick \u0001fox\u0002 jumps",
-                )
+        documentsFlow.value = listOf(
+            Document(
+                id = "1", title = "Doc One", fileName = "doc.pdf",
+                mimeType = "application/pdf", pageCount = 10, author = "Author",
+                description = "The quick fox jumps",
             )
         )
 
@@ -173,18 +163,11 @@ class LibraryScreenTest {
 
     @Test
     fun `search clears results on close`() {
-        every { mockDao.searchDocumentsWithOffsets(any()) } returns flowOf(
-            listOf(
-                SearchResultWithOffsets(
-                    id = "1",
-                    title = "Doc One",
-                    mimeType = "application/pdf",
-                    pageCount = 10,
-                    author = "Author",
-                    thumbnailPath = null,
-                    textContent = "The quick fox jumps",
-                    highlightContent = "The quick \u0001fox\u0002 jumps",
-                )
+        documentsFlow.value = listOf(
+            Document(
+                id = "1", title = "Doc One", fileName = "doc.pdf",
+                mimeType = "application/pdf", pageCount = 10, author = "Author",
+                description = "The quick fox jumps",
             )
         )
 

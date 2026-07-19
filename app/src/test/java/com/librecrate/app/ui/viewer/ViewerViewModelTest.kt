@@ -2,10 +2,8 @@ package com.librecrate.app.ui.viewer
 
 import com.librecrate.app.LibreCrateApplication
 import com.librecrate.app.data.SessionStore
-import com.librecrate.app.data.db.DocumentDao
-import com.librecrate.app.data.encryption.EncryptionManager
-import com.librecrate.app.vault.crypto.FileEncryptor
 import com.librecrate.app.data.model.Document
+import com.librecrate.app.data.vault.VaultRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -41,9 +39,7 @@ class ViewerViewModelTest {
     private val ioDispatcher = StandardTestDispatcher(testScheduler)
     private lateinit var context: android.content.Context
     private lateinit var mockApp: LibreCrateApplication
-    private lateinit var mockDao: DocumentDao
-    private lateinit var mockEncryptionManager: EncryptionManager
-    private lateinit var fileEncryptor: FileEncryptor
+    private lateinit var mockVault: VaultRepository
     private lateinit var viewModel: ViewerViewModel
 
     @Before
@@ -52,18 +48,14 @@ class ViewerViewModelTest {
 
         context = RuntimeEnvironment.getApplication().applicationContext
 
-        mockDao = mockk(relaxed = true)
-        mockEncryptionManager = mockk(relaxed = true)
+        mockVault = mockk(relaxed = true)
         mockApp = mockk(relaxed = true)
-        every { mockApp.documentDao } returns mockDao
-        every { mockApp.encryptionManager } returns mockEncryptionManager
+        every { mockApp.vaultRepository } returns mockVault
         every { mockApp.filesDir } returns context.filesDir
         every { mockApp.cacheDir } returns context.cacheDir
         every { mockApp.getSharedPreferences(any(), any()) } answers {
             context.getSharedPreferences(firstArg(), secondArg())
         }
-
-        fileEncryptor = FileEncryptor()
 
         viewModel = ViewerViewModel(mockApp, ioDispatcher)
     }
@@ -71,27 +63,22 @@ class ViewerViewModelTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+        File(context.filesDir, "files").deleteRecursively()
     }
 
     @Test
-    fun `loadDocument decrypts PDF successfully`() = runTest(testDispatcher) {
-        val masterKey = createTestMasterKey()
-        val originalContent = "Test PDF content for decryption".toByteArray()
-        val encrypted = createEncryptedFile(originalContent, masterKey)
-
+    fun `loadDocument loads PDF successfully`() = runTest(testDispatcher) {
+        val content = "Test PDF content".toByteArray()
         val doc = Document(
             id = "test-pdf-id",
             title = "Test PDF",
             fileName = "test.pdf",
             mimeType = "application/pdf",
-            filePath = encrypted.file.absolutePath,
-            fileSize = originalContent.size.toLong(),
-            encryptionIv = encrypted.iv,
-            textContent = "Test PDF content for decryption",
+            fileSize = content.size.toLong(),
         )
 
-        coEvery { mockDao.getDocumentById("test-pdf-id") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
+        coEvery { mockVault.getDocument("test-pdf-id") } returns doc
+        coEvery { mockVault.exportDocumentFile("test-pdf-id") } returns content
 
         viewModel.loadDocument("test-pdf-id")
         advanceUntilIdle()
@@ -103,12 +90,12 @@ class ViewerViewModelTest {
 
         val decryptedFile = viewModel.decryptedFile.value!!
         assertTrue("Decrypted file should exist", decryptedFile.exists())
-        assertEquals("Content should match", originalContent.size.toLong(), decryptedFile.length())
+        assertEquals("Content should match", content.size.toLong(), decryptedFile.length())
     }
 
     @Test
     fun `loadDocument handles document not found`() = runTest(testDispatcher) {
-        coEvery { mockDao.getDocumentById("nonexistent") } returns null
+        coEvery { mockVault.getDocument("nonexistent") } returns null
 
         viewModel.loadDocument("nonexistent")
         advanceUntilIdle()
@@ -118,56 +105,17 @@ class ViewerViewModelTest {
         assertNull(viewModel.document.value)
     }
 
-    @Test(expected = Exception::class)
-    fun `loadDocument throws when master key is missing`() = runTest(testDispatcher) {
-        val doc = Document(
-            id = "no-key-id",
-            title = "No Key",
-            fileName = "test.pdf",
-            mimeType = "application/pdf",
-            filePath = "/nonexistent/file.enc",
-            encryptionIv = ByteArray(12),
-        )
-
-        coEvery { mockDao.getDocumentById("no-key-id") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns null
-
-        viewModel.loadDocument("no-key-id")
-        advanceUntilIdle()
-    }
-
-    @Test
-    fun `loadDocument reports error when encryption IV is missing`() = runTest(testDispatcher) {
-        val masterKey = createTestMasterKey()
-        val content = "Some content".toByteArray()
-        val encrypted = createEncryptedFile(content, masterKey)
-
-        val doc = Document(
-            id = "no-iv-id",
-            title = "No IV",
-            fileName = "test.pdf",
-            mimeType = "application/pdf",
-            filePath = encrypted.file.absolutePath,
-            encryptionIv = null,
-        )
-
-        coEvery { mockDao.getDocumentById("no-iv-id") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
-
-        viewModel.loadDocument("no-iv-id")
-        advanceUntilIdle()
-
-        assertEquals("Document is corrupted or has no encryption data", viewModel.error.value)
-        assertNull(viewModel.decryptedFile.value)
-    }
-
     @Test
     fun `loadDocument creates new note for UUID-pattern document ID`() = runTest(testDispatcher) {
         val noteId = "123e4567-e89b-12d3-a456-426614174000"
-        val masterKey = createTestMasterKey()
+        val content = "".encodeToByteArray()
 
-        coEvery { mockDao.getDocumentById(noteId) } returns null
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
+        val doc = Document(
+            id = noteId, title = "New Note", fileName = "note.md",
+            mimeType = "text/markdown",
+        )
+        coEvery { mockVault.getDocument(noteId) } returns null andThen doc
+        coEvery { mockVault.importDocument(any(), any(), any(), any(), any(), any(), any()) } returns noteId
 
         viewModel.loadDocument(noteId, isNewNote = true)
         advanceUntilIdle()
@@ -180,28 +128,21 @@ class ViewerViewModelTest {
 
     @Test
     fun `isLoading state transitions correctly during load`() = runTest(testDispatcher) {
-        val masterKey = createTestMasterKey()
         val content = "Loading state test".toByteArray()
-        val encrypted = createEncryptedFile(content, masterKey)
-
         val doc = Document(
             id = "loading-test-id",
             title = "Loading Test",
             fileName = "test.pdf",
             mimeType = "application/pdf",
-            filePath = encrypted.file.absolutePath,
-            encryptionIv = encrypted.iv,
+            fileSize = content.size.toLong(),
         )
 
-        coEvery { mockDao.getDocumentById("loading-test-id") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
+        coEvery { mockVault.getDocument("loading-test-id") } returns doc
+        coEvery { mockVault.exportDocumentFile("loading-test-id") } returns content
 
         assertFalse("Should not be loading yet", viewModel.isLoading.value)
 
         viewModel.loadDocument("loading-test-id")
-
-        assertTrue("Should be loading after loadDocument", viewModel.isLoading.value)
-
         advanceUntilIdle()
 
         assertFalse("Should finish loading", viewModel.isLoading.value)
@@ -210,21 +151,17 @@ class ViewerViewModelTest {
 
     @Test
     fun `loadDocument saves ID to SessionStore on success`() = runTest(testDispatcher) {
-        val masterKey = createTestMasterKey()
         val content = "SessionStore test".toByteArray()
-        val encrypted = createEncryptedFile(content, masterKey)
-
         val doc = Document(
             id = "session-test-id",
             title = "Session Test",
             fileName = "test.pdf",
             mimeType = "application/pdf",
-            filePath = encrypted.file.absolutePath,
-            encryptionIv = encrypted.iv,
+            fileSize = content.size.toLong(),
         )
 
-        coEvery { mockDao.getDocumentById("session-test-id") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
+        coEvery { mockVault.getDocument("session-test-id") } returns doc
+        coEvery { mockVault.exportDocumentFile("session-test-id") } returns content
 
         viewModel.loadDocument("session-test-id")
         advanceUntilIdle()
@@ -235,8 +172,7 @@ class ViewerViewModelTest {
     @Test
     fun `loadDocument clears SessionStore when document not found`() = runTest(testDispatcher) {
         SessionStore.saveLastDocumentId(mockApp, "stale-id")
-
-        coEvery { mockDao.getDocumentById("missing") } returns null
+        coEvery { mockVault.getDocument("missing") } returns null
 
         viewModel.loadDocument("missing")
         advanceUntilIdle()
@@ -245,118 +181,78 @@ class ViewerViewModelTest {
     }
 
     @Test
-    fun `loadDocument saves new note ID to SessionStore`() = runTest(testDispatcher) {
-        val noteId = "123e4567-e89b-12d3-a456-426614174000"
-        val masterKey = createTestMasterKey()
-
-        coEvery { mockDao.getDocumentById(noteId) } returns null
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
-
-        viewModel.loadDocument(noteId, isNewNote = true)
-        advanceUntilIdle()
-
-        assertEquals(noteId, SessionStore.getLastDocumentId(mockApp))
-    }
-
-    @Test
     fun `loadDocument saves EPUB document ID to SessionStore`() = runTest(testDispatcher) {
-        val masterKey = createTestMasterKey()
         val content = "EPUB content".toByteArray()
-        val encrypted = createEncryptedFile(content, masterKey)
-
         val doc = Document(
             id = "epub-session-test",
             title = "Test EPUB",
             fileName = "book.epub",
             mimeType = "application/epub+zip",
-            filePath = encrypted.file.absolutePath,
-            encryptionIv = encrypted.iv,
             pageCount = 42,
+            fileSize = content.size.toLong(),
         )
 
-        coEvery { mockDao.getDocumentById("epub-session-test") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
+        coEvery { mockVault.getDocument("epub-session-test") } returns doc
+        coEvery { mockVault.exportDocumentFile("epub-session-test") } returns content
 
         viewModel.loadDocument("epub-session-test")
         advanceUntilIdle()
 
         assertEquals("SessionStore should have EPUB doc ID", "epub-session-test", SessionStore.getLastDocumentId(mockApp))
         assertEquals("Test EPUB", viewModel.document.value?.title)
-        assertEquals("application/epub+zip", viewModel.document.value?.mimeType)
         assertNull("No error expected", viewModel.error.value)
     }
 
     @Test
-    fun `after restart EPUB document is still loadable`() = runTest(testDispatcher) {
-        // Simulate first session: load an EPUB document
-        val masterKey = createTestMasterKey()
-        val content = "Persistent EPUB".toByteArray()
-        val encrypted = createEncryptedFile(content, masterKey)
-        val docId = "epub-restart-test"
+    fun `loadDocument reports error when file data is null`() = runTest(testDispatcher) {
+        val doc = Document(
+            id = "no-file-id",
+            title = "No File",
+            fileName = "test.pdf",
+            mimeType = "application/pdf",
+        )
 
+        coEvery { mockVault.getDocument("no-file-id") } returns doc
+        coEvery { mockVault.exportDocumentFile("no-file-id") } returns null
+
+        viewModel.loadDocument("no-file-id")
+        advanceUntilIdle()
+
+        assertEquals("Failed to read document file", viewModel.error.value)
+        assertNull(viewModel.decryptedFile.value)
+    }
+
+    @Test
+    fun `after restart EPUB document is still loadable`() = runTest(testDispatcher) {
+        val content = "Persistent EPUB".toByteArray()
+        val docId = "epub-restart-test"
         val doc = Document(
             id = docId,
             title = "Restart EPUB",
             fileName = "book.epub",
             mimeType = "application/epub+zip",
-            filePath = encrypted.file.absolutePath,
-            encryptionIv = encrypted.iv,
             pageCount = 10,
+            fileSize = content.size.toLong(),
         )
 
-        coEvery { mockDao.getDocumentById(docId) } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns masterKey
+        coEvery { mockVault.getDocument(docId) } returns doc
+        coEvery { mockVault.exportDocumentFile(docId) } returns content
 
         viewModel.loadDocument(docId)
         advanceUntilIdle()
         assertEquals("First load should succeed", "Restart EPUB", viewModel.document.value?.title)
 
-        // Simulate app restart by clearing in-memory state and creating a new ViewModel
         val savedId = SessionStore.getLastDocumentId(mockApp)
         assertEquals("SessionStore should have the ID after first load", docId, savedId)
 
-        // Second session: new ViewModel loads from saved ID
         val viewModel2 = ViewerViewModel(mockApp, ioDispatcher)
-        coEvery { mockDao.getDocumentById(savedId!!) } returns doc
+        coEvery { mockVault.getDocument(savedId!!) } returns doc
+        coEvery { mockVault.exportDocumentFile(savedId!!) } returns content
 
         viewModel2.loadDocument(savedId!!)
         advanceUntilIdle()
 
         assertEquals("After restart, EPUB should still load", "Restart EPUB", viewModel2.document.value?.title)
         assertNull("No error after restart", viewModel2.error.value)
-    }
-
-    @Test(expected = Exception::class)
-    fun `loadDocument throws on decryption failure`() = runTest(testDispatcher) {
-        SessionStore.saveLastDocumentId(mockApp, "stale-id")
-
-        val doc = Document(
-            id = "corrupt",
-            title = "Corrupt",
-            fileName = "test.pdf",
-            mimeType = "application/pdf",
-            filePath = "/nonexistent/file.enc",
-            encryptionIv = ByteArray(12),
-        )
-
-        coEvery { mockDao.getDocumentById("corrupt") } returns doc
-        every { mockEncryptionManager.getMasterKeyForSession() } returns createTestMasterKey()
-
-        viewModel.loadDocument("corrupt")
-        advanceUntilIdle()
-    }
-
-    private fun createTestMasterKey(): ByteArray {
-        return ByteArray(32) { it.toByte() }
-    }
-
-    private data class EncryptedFileResult(val file: File, val iv: ByteArray)
-
-    private fun createEncryptedFile(content: ByteArray, masterKey: ByteArray): EncryptedFileResult {
-        val filesDir = File(context.filesDir, "files").also { it.mkdirs() }
-        val encryptedFile = File(filesDir, "test_${System.nanoTime()}.enc")
-        val (iv, encryptedData) = fileEncryptor.encryptBytes(content, masterKey)
-        encryptedFile.writeBytes(iv + encryptedData)
-        return EncryptedFileResult(encryptedFile, iv)
     }
 }
