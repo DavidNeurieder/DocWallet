@@ -1,6 +1,11 @@
 pub mod bench;
+pub mod create;
 pub mod crypto;
 pub mod document;
+pub mod export;
+pub mod inspect;
+pub mod merge;
 pub mod password;
 pub mod search;
+pub mod util;
 pub mod vault;

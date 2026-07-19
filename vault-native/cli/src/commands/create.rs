@@ -1,0 +1,78 @@
+use clap::Args;
+use std::path::PathBuf;
+use vault_native::crypto::argon2::Argon2Params;
+
+#[derive(Args)]
+pub struct CreateArgs {
+    /// Source directory containing plain documents
+    pub source: PathBuf,
+    /// Password
+    #[arg(short, long)]
+    pub password: String,
+    /// Output vault file
+    #[arg(short, long)]
+    pub output: PathBuf,
+}
+
+pub fn run(args: CreateArgs) -> anyhow::Result<()> {
+    let tmp = tempfile::TempDir::new()?;
+    let master_key =
+        vault_native::format::export::create_vault_layout(tmp.path(), &args.password)?;
+
+    let db_path = tmp.path().join("databases").join("librecrate.db");
+    let conn = vault_native::db::schema::open_encrypted(
+        db_path.to_str().unwrap(),
+        &master_key,
+    )?;
+
+    let files = crate::commands::util::walk_files(&args.source)?;
+    let mut doc_count = 0u32;
+    for (abs_path, _rel) in &files {
+        let data = std::fs::read(abs_path)?;
+        let file_name = abs_path.file_name().unwrap_or_default().to_string_lossy();
+        let title = file_name.to_string();
+        let mime = mime_guess::from_path(abs_path)
+            .first_or_octet_stream()
+            .to_string();
+        let id = uuid::Uuid::new_v4().to_string();
+        let text = String::from_utf8_lossy(&data);
+
+        vault_native::db::storage::import_document(
+            &conn,
+            tmp.path(),
+            &id,
+            &title,
+            &data,
+            &mime,
+            "",
+            "",
+            Some(&text),
+        )?;
+        doc_count += 1;
+    }
+    drop(conn);
+
+    let enc_dir = tmp.path().join("encryption");
+    let db_dir = tmp.path().join("databases");
+    let files_dir = tmp.path().join("files");
+
+    let keys = crate::commands::util::read_dir_files(&enc_dir)?;
+    let db_file = std::fs::read(db_dir.join("librecrate.db"))?;
+    let vault_files = crate::commands::util::read_dir_files(&files_dir)?;
+    let kdf = Argon2Params::default();
+
+    let exported = vault_native::format::export::export(
+        &vault_files,
+        Some(&db_file),
+        &args.password,
+        &keys,
+        &kdf,
+    )?;
+    std::fs::write(&args.output, &exported.data)?;
+    println!(
+        "Vault written to {} ({} documents)",
+        args.output.display(),
+        doc_count
+    );
+    Ok(())
+}
