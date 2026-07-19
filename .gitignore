@@ -39,6 +39,9 @@ Thumbs.db
 # Environment
 .env
 
+# Rust build artifacts (vault-native workspace)
+vault-native/target/
+
 # docs
 /old_docs
 /Download

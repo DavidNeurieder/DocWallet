@@ -1,0 +1,134 @@
+use base64::Engine;
+use crate::crypto::aes_gcm;
+use crate::crypto::argon2::{self, Argon2Params};
+use crate::error::{Error, Result};
+use crate::format::manifest::VaultManifest;
+use crate::format::package;
+use std::io::Write;
+use zip::ZipWriter;
+use zip::write::FileOptions;
+
+pub struct ExportedVault {
+    pub data: Vec<u8>,
+}
+
+pub fn export(
+    files: &[(String, Vec<u8>)],
+    db_file: Option<&[u8]>,
+    vault_password: &str,
+    keys: &[(String, Vec<u8>)],
+    kdf_params: &Argon2Params,
+) -> Result<ExportedVault> {
+    let salt = argon2::generate_salt();
+    let container_key =
+        argon2::derive_key(vault_password, &salt, kdf_params).ok_or(Error::Kdf(
+            "container key derivation failed".into(),
+        ))?;
+
+    // Build ZIP entries
+    let mut zip_entries: Vec<(String, Vec<u8>)> = Vec::new();
+
+    for (name, data) in keys {
+        zip_entries.push((format!("keys/{name}"), data.clone()));
+    }
+
+    if let Some(db) = db_file {
+        zip_entries.push(("db/librecrate.db".into(), db.to_vec()));
+    }
+
+    for (name, data) in files {
+        zip_entries.push((format!("files/{name}"), data.clone()));
+    }
+
+    // Create plain ZIP blob
+    let plain_zip = create_zip_blob(&zip_entries)?;
+
+    // Encrypt ZIP with container key
+    let (iv, ciphertext) =
+        aes_gcm::encrypt_bytes(&plain_zip, &container_key).ok_or(Error::Crypto("encryption failed".into()))?;
+    let encrypted_blob: Vec<u8> = iv.into_iter().chain(ciphertext).collect();
+
+    let document_count = files.len() as u32;
+    let manifest = VaultManifest {
+        version: 1,
+        kdf: "argon2id".into(),
+        salt: base64::engine::general_purpose::STANDARD.encode(&salt),
+        argon2_memory: kdf_params.memory_cost,
+        argon2_iterations: kdf_params.iterations,
+        argon2_parallelism: kdf_params.parallelism,
+        document_count,
+    };
+
+    let data = package::write(&manifest, &encrypted_blob);
+    Ok(ExportedVault { data })
+}
+
+fn create_zip_blob(entries: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    {
+        let mut zip = ZipWriter::new(std::io::Cursor::new(&mut buf));
+        for (name, data) in entries {
+            zip.start_file::<&str, ()>(name, FileOptions::default())
+                .map_err(|e| Error::Compression(e.to_string()))?;
+            zip.write_all(data)
+                .map_err(|e| Error::Compression(e.to_string()))?;
+        }
+        zip.finish()
+            .map_err(|e| Error::Compression(e.to_string()))?;
+    }
+    Ok(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::format::import;
+
+    #[test]
+    fn test_export_import_roundtrip() {
+        let password = "test-password";
+        let kdf_params = Argon2Params::default();
+        let master_key = crate::crypto::aes_gcm::generate_key();
+        let salted = b"test-salt-1234567";
+
+        let user_key =
+            crate::crypto::argon2::derive_key(password, salted, &kdf_params).unwrap();
+        let wrapped_master_key =
+            crate::crypto::aes_kw::wrap(&user_key, &master_key).unwrap();
+        let db_data = b"fake-db-content".to_vec();
+        let file_data = b"hello-world".to_vec();
+
+        let exported = export(
+            &[("test.txt".into(), file_data.clone())],
+            Some(&db_data),
+            password,
+            &[
+                ("wrapped_master_key".into(), wrapped_master_key.clone()),
+                ("salt".into(), salted.to_vec()),
+            ],
+            &kdf_params,
+        )
+        .unwrap();
+
+        // Verify structure
+        assert!(exported.data.len() > 16 + 4 + 4 + 10);
+        assert_eq!(&exported.data[..16], b"LIBCRATE_VAULT\0\0");
+
+        // Re-import and verify
+        let imported = import::import(&exported.data, password, &kdf_params).unwrap();
+        assert_eq!(imported.db_file, Some(db_data));
+        assert_eq!(imported.files.len(), 1);
+        assert_eq!(imported.files[0].1, file_data);
+
+        let imported_wmk = imported
+            .keys
+            .iter()
+            .find(|(k, _)| k == "wrapped_master_key")
+            .map(|(_, v)| v.clone())
+            .unwrap();
+
+        let unwrapped =
+            crate::crypto::aes_kw::unwrap(&imported_wmk, &user_key).unwrap();
+        assert_eq!(unwrapped, master_key);
+    }
+}
