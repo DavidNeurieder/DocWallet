@@ -153,6 +153,33 @@ pub fn list_collections(conn: &Connection) -> Result<Vec<CollectionRow>> {
     Ok(rows)
 }
 
+pub fn update_document(conn: &Connection, id: &str, title: &str, is_favorite: bool) -> Result<bool> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    let affected = conn.execute(
+        "UPDATE documents SET title = ?1, is_favorite = ?2, modified_at = ?3 WHERE id = ?4",
+        params![title, is_favorite as i32, now, id],
+    )?;
+    Ok(affected > 0)
+}
+
+/// Add a document and index it into FTS5 in one call.
+pub fn add_document_full(
+    conn: &Connection,
+    doc: &DocumentRow,
+    text_content: Option<&str>,
+) -> Result<()> {
+    add_document(conn, doc)?;
+    conn.execute(
+        "INSERT INTO documents_fts(rowid, title, author, description, text_content)
+         VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4)",
+        params![doc.title, doc.author, doc.description, text_content.unwrap_or("")],
+    )?;
+    Ok(())
+}
+
 pub fn list_tags(conn: &Connection) -> Result<Vec<TagRow>> {
     let mut stmt = conn.prepare("SELECT id, name, color FROM tags ORDER BY name")?;
     let rows = stmt

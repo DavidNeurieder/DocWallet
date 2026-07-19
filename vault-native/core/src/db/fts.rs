@@ -8,19 +8,26 @@ pub fn rebuild_index(conn: &Connection) -> Result<()> {
 #[derive(Debug)]
 pub struct FtsResult {
     pub rank: f64,
-    pub rowid: i64,
+    pub id: String,
+    pub title: String,
 }
 
-/// Search documents using FTS5. Returns the rowids ordered by relevance.
+/// Search documents using FTS5. Returns document id/title ordered by relevance.
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<FtsResult>> {
     let mut stmt = conn.prepare(
-        "SELECT rank, rowid FROM documents_fts WHERE documents_fts MATCH ?1 ORDER BY rank LIMIT 100",
+        "SELECT d.id, d.title, f.rank
+         FROM documents_fts f
+         JOIN documents d ON d.rowid = f.rowid
+         WHERE f.documents_fts MATCH ?1
+         ORDER BY f.rank
+         LIMIT 100",
     )?;
     let results = stmt
         .query_map(params![query], |row| {
             Ok(FtsResult {
-                rank: row.get(0)?,
-                rowid: row.get(1)?,
+                id: row.get(0)?,
+                title: row.get(1)?,
+                rank: row.get(2)?,
             })
         })?
         .filter_map(|r| r.ok())
@@ -57,5 +64,8 @@ mod tests {
 
         let results = search(&conn, "fox").unwrap();
         assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "doc1");
+        assert_eq!(results[0].title, "The quick brown fox");
+        assert!(results[0].rank.is_finite());
     }
 }

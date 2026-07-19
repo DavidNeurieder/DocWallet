@@ -8,13 +8,20 @@ pub struct SearchArgs {
     pub db: PathBuf,
     /// Master key (hex)
     #[arg(short, long)]
-    pub key: String,
+    pub key: Option<String>,
+    /// Password to derive master key from vault dir
+    #[arg(short = 'P', long)]
+    pub password: Option<String>,
     /// Search query
     pub query: String,
 }
 
 pub fn run(args: SearchArgs) -> anyhow::Result<()> {
-    let mk = hex::decode(&args.key)?;
+    let mk = crate::commands::password::resolve_master_key(
+        &args.db.parent().and_then(|p| p.parent()).unwrap_or(&args.db),
+        args.key.as_deref(),
+        args.password.as_deref(),
+    )?;
     let conn = vault_native::db::schema::open_encrypted(
         args.db.to_str().unwrap(),
         &mk,
@@ -25,7 +32,7 @@ pub fn run(args: SearchArgs) -> anyhow::Result<()> {
     } else {
         println!("Results ({}):", results.len());
         for r in &results {
-            println!("  rowid={} (rank={:.4})", r.rowid, r.rank);
+            println!("  {}: {} (rank={:.4})", r.id, r.title, r.rank);
         }
     }
     Ok(())

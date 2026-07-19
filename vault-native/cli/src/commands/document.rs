@@ -1,5 +1,6 @@
 use clap::Args;
 use std::path::PathBuf;
+use vault_native::db::storage;
 
 #[derive(Args)]
 pub struct DocumentArgs {
@@ -16,7 +17,10 @@ pub enum DocumentAction {
         db: PathBuf,
         /// Master key (hex)
         #[arg(short, long)]
-        key: String,
+        key: Option<String>,
+        /// Password to derive master key from vault dir
+        #[arg(short = 'P', long)]
+        password: Option<String>,
     },
     /// Get a document by ID
     Get {
@@ -25,24 +29,36 @@ pub enum DocumentAction {
         db: PathBuf,
         /// Master key (hex)
         #[arg(short, long)]
-        key: String,
+        key: Option<String>,
+        /// Password to derive master key from vault dir
+        #[arg(short = 'P', long)]
+        password: Option<String>,
         /// Document ID
         id: String,
+        /// Export file blob to this path
+        #[arg(short, long)]
+        export: Option<PathBuf>,
     },
-    /// Add a document
+    /// Add a document (stores blob in files/)
     Add {
         /// Path to the encrypted database
         #[arg(short, long)]
         db: PathBuf,
         /// Master key (hex)
         #[arg(short, long)]
-        key: String,
+        key: Option<String>,
+        /// Password to derive master key from vault dir
+        #[arg(short = 'P', long)]
+        password: Option<String>,
         /// Title
         #[arg(short, long)]
         title: String,
         /// File to import
         #[arg(short, long)]
         file: PathBuf,
+        /// Vault root (for files/ storage)
+        #[arg(short = 'V', long)]
+        vault: PathBuf,
     },
     /// Update a document's title and/or favorite status
     Update {
@@ -51,7 +67,10 @@ pub enum DocumentAction {
         db: PathBuf,
         /// Master key (hex)
         #[arg(short, long)]
-        key: String,
+        key: Option<String>,
+        /// Password to derive master key from vault dir
+        #[arg(short = 'P', long)]
+        password: Option<String>,
         /// Document ID
         id: String,
         /// New title
@@ -61,23 +80,37 @@ pub enum DocumentAction {
         #[arg(short, long)]
         favorite: Option<bool>,
     },
-    /// Delete a document by ID
+    /// Delete a document by ID (removes blob + DB + FTS entry)
     Delete {
         /// Path to the encrypted database
         #[arg(short, long)]
         db: PathBuf,
         /// Master key (hex)
         #[arg(short, long)]
-        key: String,
+        key: Option<String>,
+        /// Password to derive master key from vault dir
+        #[arg(short = 'P', long)]
+        password: Option<String>,
         /// Document ID
         id: String,
+        /// Vault root (for files/ removal)
+        #[arg(short = 'V', long)]
+        vault: PathBuf,
     },
+}
+
+fn resolve_mk(db: &PathBuf, key: &Option<String>, password: &Option<String>) -> anyhow::Result<Vec<u8>> {
+    crate::commands::password::resolve_master_key(
+        &db.parent().and_then(|p| p.parent()).unwrap_or(db),
+        key.as_deref(),
+        password.as_deref(),
+    )
 }
 
 pub fn run(args: DocumentArgs) -> anyhow::Result<()> {
     match args.action {
-        DocumentAction::List { db, key } => {
-            let mk = hex::decode(&key)?;
+        DocumentAction::List { db, key, password } => {
+            let mk = resolve_mk(&db, &key, &password)?;
             let conn = vault_native::db::schema::open_encrypted(db.to_str().unwrap(), &mk)?;
             let docs = vault_native::db::queries::list_documents(&conn)?;
             println!("Documents ({}):", docs.len());
@@ -87,22 +120,36 @@ pub fn run(args: DocumentArgs) -> anyhow::Result<()> {
             }
             Ok(())
         }
-        DocumentAction::Get { db, key, id } => {
-            let mk = hex::decode(&key)?;
+        DocumentAction::Get {
+            db,
+            key,
+            password,
+            id,
+            export,
+        } => {
+            let mk = resolve_mk(&db, &key, &password)?;
             let conn = vault_native::db::schema::open_encrypted(db.to_str().unwrap(), &mk)?;
             match vault_native::db::queries::get_document(&conn, &id)? {
                 Some(doc) => {
-                    println!("ID:          {}", doc.id);
-                    println!("Title:       {}", doc.title);
-                    println!("File name:   {}", doc.file_name);
-                    println!("MIME type:   {}", doc.mime_type);
-                    println!("File path:   {}", doc.file_path);
-                    println!("File size:   {}", doc.file_size);
-                    println!("Page count:  {}", doc.page_count);
-                    println!("Author:      {}", doc.author);
-                    println!("Favorite:    {}", doc.is_favorite);
-                    println!("Conflict:    {}", doc.is_conflict);
-                    println!("Modified at: {}", doc.modified_at);
+                    if let Some(export_path) = export {
+                        let vault_root = db.parent().and_then(|p| p.parent()).unwrap_or(std::path::Path::new("."));
+                        let data = storage::load_file(&vault_root, &doc.id)
+                            .ok_or_else(|| anyhow::anyhow!("File blob not found for document '{}'", doc.id))?;
+                        std::fs::write(&export_path, data)?;
+                        println!("Blob exported to {}", export_path.display());
+                    } else {
+                        println!("ID:          {}", doc.id);
+                        println!("Title:       {}", doc.title);
+                        println!("File name:   {}", doc.file_name);
+                        println!("MIME type:   {}", doc.mime_type);
+                        println!("File path:   {}", doc.file_path);
+                        println!("File size:   {}", doc.file_size);
+                        println!("Page count:  {}", doc.page_count);
+                        println!("Author:      {}", doc.author);
+                        println!("Favorite:    {}", doc.is_favorite);
+                        println!("Conflict:    {}", doc.is_conflict);
+                        println!("Modified at: {}", doc.modified_at);
+                    }
                     Ok(())
                 }
                 None => {
@@ -114,79 +161,57 @@ pub fn run(args: DocumentArgs) -> anyhow::Result<()> {
         DocumentAction::Add {
             db,
             key,
+            password,
             title,
             file,
+            vault,
         } => {
-            let mk = hex::decode(&key)?;
+            let mk = resolve_mk(&db, &key, &password)?;
             let conn = vault_native::db::schema::open_encrypted(db.to_str().unwrap(), &mk)?;
-            let id = uuid::Uuid::new_v4().to_string();
             let file_bytes = std::fs::read(&file)?;
             let file_name = file.file_name().unwrap_or_default().to_string_lossy().to_string();
             let mime = mime_guess::from_path(&file_name)
                 .first_or_octet_stream()
                 .to_string();
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
+            let id = uuid::Uuid::new_v4().to_string();
+            let text_content = String::from_utf8_lossy(&file_bytes);
 
-            vault_native::db::queries::add_document(
-                &conn,
-                &vault_native::db::queries::DocumentRow {
-                    id,
-                    title,
-                    file_name: file_name.clone(),
-                    mime_type: mime,
-                    file_path: file_name,
-                    file_size: file_bytes.len() as i64,
-                    page_count: 0,
-                    author: String::new(),
-                    description: String::new(),
-                    thumbnail_path: None,
-                    imported_at: now,
-                    last_opened_at: now,
-                    modified_at: now,
-                    is_favorite: false,
-                    is_conflict: false,
-                    conflict_with: None,
-                    collection_id: None,
-                    encryption_iv: None,
-                    current_page: 0,
-                },
+            storage::import_document(
+                &conn, &vault, &id, &title,
+                &file_bytes, &mime, "", "",
+                Some(&text_content),
             )?;
-            println!("Document added");
+            println!("Document added with id: {}", id);
             Ok(())
         }
         DocumentAction::Update {
             db,
             key,
+            password,
             id,
             title,
             favorite,
         } => {
-            let mk = hex::decode(&key)?;
+            let mk = resolve_mk(&db, &key, &password)?;
             let conn = vault_native::db::schema::open_encrypted(db.to_str().unwrap(), &mk)?;
             let existing = vault_native::db::queries::get_document(&conn, &id)?
                 .ok_or_else(|| anyhow::anyhow!("Document '{}' not found", id))?;
-
             let new_title = title.unwrap_or(existing.title);
-            let new_fav = favorite.unwrap_or(existing.is_favorite) as i32;
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
-
-            conn.execute(
-                "UPDATE documents SET title = ?1, is_favorite = ?2, modified_at = ?3 WHERE id = ?4",
-                rusqlite::params![new_title, new_fav, now, id],
-            )?;
+            let new_fav = favorite.unwrap_or(existing.is_favorite);
+            vault_native::db::queries::update_document(&conn, &id, &new_title, new_fav)?;
             println!("Document updated");
             Ok(())
         }
-        DocumentAction::Delete { db, key, id } => {
-            let mk = hex::decode(&key)?;
+        DocumentAction::Delete {
+            db,
+            key,
+            password,
+            id,
+            vault,
+        } => {
+            let mk = resolve_mk(&db, &key, &password)?;
             let conn = vault_native::db::schema::open_encrypted(db.to_str().unwrap(), &mk)?;
-            if vault_native::db::queries::delete_document(&conn, &id)? {
+            if storage::delete_document_full(&conn, &vault, &id)? {
                 println!("Document deleted");
             } else {
                 eprintln!("Document '{}' not found", id);

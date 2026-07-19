@@ -79,6 +79,42 @@ fn create_zip_blob(entries: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
+/// Bootstrap a vault layout at `dir`:
+///   encryption/wrapped_master_key, encryption/salt,
+///   databases/librecrate.db (encrypted with schema),
+///   files/
+/// Returns the generated master key.
+pub fn create_vault_layout(dir: &std::path::Path, password: &str) -> Result<Vec<u8>> {
+    use crate::crypto::aes_kw;
+
+    let master_key = aes_kw::generate_master_key();
+    let salt = argon2::generate_salt();
+    let params = Argon2Params::default();
+    let user_key =
+        argon2::derive_key(password, &salt, &params)
+            .ok_or(Error::Kdf("user key derivation failed".into()))?;
+    let wrapped_master_key =
+        aes_kw::wrap(&user_key, &master_key)
+            .ok_or(Error::Crypto("master key wrap failed".into()))?;
+
+    let enc_dir = dir.join("encryption");
+    std::fs::create_dir_all(&enc_dir)?;
+    std::fs::write(enc_dir.join("wrapped_master_key"), &wrapped_master_key)?;
+    std::fs::write(enc_dir.join("salt"), &salt)?;
+
+    let db_dir = dir.join("databases");
+    let db_path = db_dir.join("librecrate.db");
+    std::fs::create_dir_all(&db_dir)?;
+    crate::db::schema::create_encrypted_db(
+        db_path.to_str().ok_or(Error::InvalidData("path".into()))?,
+        &master_key,
+    )?;
+
+    std::fs::create_dir_all(dir.join("files"))?;
+
+    Ok(master_key)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

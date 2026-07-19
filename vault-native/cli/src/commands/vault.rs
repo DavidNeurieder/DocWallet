@@ -10,23 +10,31 @@ pub struct VaultArgs {
 
 #[derive(clap::Subcommand)]
 pub enum VaultAction {
+    /// Bootstrap a new vault directory structure
+    Init {
+        /// Directory to create the vault in
+        dir: PathBuf,
+        /// Password for key derivation
+        #[arg(short, long)]
+        password: String,
+    },
     /// Inspect a vault file and print its manifest
     Inspect {
         /// Path to the vault file
         vault_path: PathBuf,
     },
-    /// Create a new vault file from source directory (expects encryption/, databases/, files/ subdirs)
+    /// Create a vault file by walking a vault directory
     Create {
         /// Output vault path
         #[arg(short, long)]
         output: PathBuf,
-        /// Password for encryption
+        /// Password
         #[arg(short, long)]
         password: String,
-        /// Source directory containing encryption/, databases/, files/
+        /// Source vault directory (containing encryption/, databases/, files/)
         source: PathBuf,
     },
-    /// Export a vault from explicit paths
+    /// Export: same as create (source vault dir to .vault file)
     Export {
         /// Output vault path
         #[arg(short, long)]
@@ -34,19 +42,22 @@ pub enum VaultAction {
         /// Password
         #[arg(short, long)]
         password: String,
-        /// Encryption key directory
-        #[arg(short, long)]
-        enc_dir: PathBuf,
-        /// Database directory
-        #[arg(short, long)]
-        db_dir: PathBuf,
-        /// Files directory
-        #[arg(short, long)]
-        files_dir: PathBuf,
+        /// Source vault directory (containing encryption/, databases/, files/)
+        source: PathBuf,
     },
-    /// Import a vault file to a directory
+    /// Import a vault file to a directory (also `extract`)
     Import {
         /// Vault file to import
+        vault_path: PathBuf,
+        /// Password
+        #[arg(short, long)]
+        password: String,
+        /// Output directory for extracted contents
+        output: PathBuf,
+    },
+    /// Alias for import
+    Extract {
+        /// Vault file to extract
         vault_path: PathBuf,
         /// Password
         #[arg(short, long)]
@@ -74,6 +85,13 @@ fn read_dir_files(dir: &PathBuf) -> anyhow::Result<Vec<(String, Vec<u8>)>> {
 
 pub fn run(args: VaultArgs) -> anyhow::Result<()> {
     match args.action {
+        VaultAction::Init { dir, password } => {
+            let mk = vault_native::format::export::create_vault_layout(&dir, &password)?;
+            println!("Vault initialized at {}", dir.display());
+            println!("Master key (hex): {}", hex::encode(&mk));
+            println!("Save this key for direct DB access (without --password)");
+            Ok(())
+        }
         VaultAction::Inspect { vault_path } => {
             let data = std::fs::read(&vault_path)?;
             let pkg =
@@ -95,20 +113,43 @@ pub fn run(args: VaultArgs) -> anyhow::Result<()> {
             output,
             password,
             source,
+        }
+        | VaultAction::Export {
+            output,
+            password,
+            source,
         } => {
             let enc_dir = source.join("encryption");
             let db_dir = source.join("databases");
             let files_dir = source.join("files");
-            do_export(&password, &enc_dir, &db_dir, &files_dir, &output)
+            let keys = read_dir_files(&enc_dir)?;
+            let db_file = {
+                let db_path = db_dir.join("librecrate.db");
+                if db_path.exists() {
+                    Some(std::fs::read(&db_path)?)
+                } else {
+                    None
+                }
+            };
+            let files = read_dir_files(&files_dir)?;
+            let kdf_params = Argon2Params::default();
+            let exported = vault_native::format::export::export(
+                &files,
+                db_file.as_deref(),
+                &password,
+                &keys,
+                &kdf_params,
+            )?;
+            std::fs::write(&output, &exported.data)?;
+            println!("Vault written to {}", output.display());
+            Ok(())
         }
-        VaultAction::Export {
-            output,
-            password,
-            enc_dir,
-            db_dir,
-            files_dir,
-        } => do_export(&password, &enc_dir, &db_dir, &files_dir, &output),
         VaultAction::Import {
+            vault_path,
+            password,
+            output,
+        }
+        | VaultAction::Extract {
             vault_path,
             password,
             output,
@@ -139,34 +180,4 @@ pub fn run(args: VaultArgs) -> anyhow::Result<()> {
             Ok(())
         }
     }
-}
-
-fn do_export(
-    password: &str,
-    enc_dir: &PathBuf,
-    db_dir: &PathBuf,
-    files_dir: &PathBuf,
-    output: &PathBuf,
-) -> anyhow::Result<()> {
-    let keys = read_dir_files(enc_dir)?;
-    let db_file = {
-        let db_path = db_dir.join("librecrate.db");
-        if db_path.exists() {
-            Some(std::fs::read(&db_path)?)
-        } else {
-            None
-        }
-    };
-    let files = read_dir_files(files_dir)?;
-    let kdf_params = Argon2Params::default();
-    let exported = vault_native::format::export::export(
-        &files,
-        db_file.as_deref(),
-        password,
-        &keys,
-        &kdf_params,
-    )?;
-    std::fs::write(output, &exported.data)?;
-    println!("Vault written to {}", output.display());
-    Ok(())
 }

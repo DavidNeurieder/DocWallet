@@ -122,6 +122,19 @@ pub fn open_plain(path: &str) -> rusqlite::Result<Connection> {
     Connection::open(path)
 }
 
+/// Open an encrypted DB and create all tables in one call.
+/// Creates parent directories if they don't exist.
+pub fn create_encrypted_db(path: &str, master_key: &[u8]) -> rusqlite::Result<Connection> {
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+        })?;
+    }
+    let conn = open_encrypted(path, master_key)?;
+    create_all_tables(&conn)?;
+    Ok(conn)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
