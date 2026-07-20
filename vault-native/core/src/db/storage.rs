@@ -1,23 +1,37 @@
+use crate::crypto::aes_gcm;
 use crate::db::queries::{self, DocumentRow};
 use rusqlite::Connection;
 use std::path::Path;
 
 /// Save a thumbnail blob at `base_dir/files/<id>.thumb`.
-pub fn store_thumbnail(base_dir: &Path, id: &str, data: &[u8]) -> std::io::Result<()> {
+pub fn store_thumbnail(base_dir: &Path, id: &str, data: &[u8], key: Option<&[u8]>) -> std::io::Result<()> {
     let path = base_dir.join("files").join(format!("{id}.thumb"));
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&path, data)
+    let blob = if let Some(k) = key {
+        let (iv, ct) = aes_gcm::encrypt_bytes(data, k).unwrap_or_else(|| (vec![], vec![]));
+        if iv.is_empty() { return Err(std::io::Error::new(std::io::ErrorKind::Other, "encryption failed")); }
+        let mut out = iv;
+        out.extend_from_slice(&ct);
+        out
+    } else {
+        data.to_vec()
+    };
+    std::fs::write(&path, blob)
 }
 
 /// Load a thumbnail blob from `base_dir/files/<id>.thumb`.
-pub fn load_thumbnail(base_dir: &Path, id: &str) -> Option<Vec<u8>> {
+pub fn load_thumbnail(base_dir: &Path, id: &str, key: Option<&[u8]>) -> Option<Vec<u8>> {
     let path = base_dir.join("files").join(format!("{id}.thumb"));
-    if path.exists() {
-        std::fs::read(&path).ok()
+    let raw = if path.exists() { std::fs::read(&path).ok()? } else { return None };
+    if let Some(k) = key {
+        if raw.len() < aes_gcm::IV_LENGTH { return None; }
+        let iv = &raw[..aes_gcm::IV_LENGTH];
+        let ct = &raw[aes_gcm::IV_LENGTH..];
+        aes_gcm::decrypt_bytes(ct, k, iv)
     } else {
-        None
+        Some(raw)
     }
 }
 
@@ -83,7 +97,7 @@ fn extension_for_mime(mime: &str) -> Option<&'static str> {
     }
 }
 
-/// Import a document: store the file blob, insert DB row with IV, and index into FTS5.
+/// Import a document: store the file blob (encrypted if key is provided), insert DB row, and index into FTS5.
 /// Returns the document ID.
 pub fn import_document(
     conn: &Connection,
@@ -95,14 +109,26 @@ pub fn import_document(
     author: &str,
     description: &str,
     text_content: Option<&str>,
+    key: Option<&[u8]>,
 ) -> rusqlite::Result<String> {
-    // Store blob
-    save_file(base_dir, id, file_data).map_err(|e| {
+    let (stored_data, iv): (Vec<u8>, Vec<u8>) = if let Some(k) = key {
+        let (real_iv, ct) = aes_gcm::encrypt_bytes(file_data, k)
+            .ok_or_else(|| rusqlite::Error::ToSqlConversionFailure(
+                Box::new(std::io::Error::new(std::io::ErrorKind::Other, "encryption failed"))
+            ))?;
+        let mut out = real_iv.clone();
+        out.extend_from_slice(&ct);
+        (out, real_iv)
+    } else {
+        // No key — store plaintext with random garbage IV (legacy behavior)
+        let dummy_iv: Vec<u8> = (0..aes_gcm::IV_LENGTH).map(|_| rand::random::<u8>()).collect();
+        (file_data.to_vec(), dummy_iv)
+    };
+
+    save_file(base_dir, id, &stored_data).map_err(|e| {
         rusqlite::Error::ToSqlConversionFailure(Box::new(e))
     })?;
 
-    // Generate random 12-byte IV (matching app behavior)
-    let iv: Vec<u8> = (0..12).map(|_| rand::random::<u8>()).collect();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -129,10 +155,18 @@ pub fn import_document(
     Ok(id.to_string())
 }
 
-/// Export a document's file blob from storage.
-pub fn export_document_file(conn: &Connection, base_dir: &Path, id: &str) -> Option<Vec<u8>> {
+/// Export a document's file blob from storage (decrypted if key is provided).
+pub fn export_document_file(conn: &Connection, base_dir: &Path, id: &str, key: Option<&[u8]>) -> Option<Vec<u8>> {
     let doc = queries::get_document(conn, id).ok()??;
-    load_file(base_dir, &doc.id)
+    let raw = load_file(base_dir, &doc.id)?;
+    if let Some(k) = key {
+        let iv = doc.encryption_iv.as_deref()?;
+        if raw.len() < aes_gcm::IV_LENGTH { return None; }
+        let ct = &raw[aes_gcm::IV_LENGTH..];
+        aes_gcm::decrypt_bytes(ct, k, iv)
+    } else {
+        Some(raw)
+    }
 }
 
 /// Delete a document: remove file blob, delete DB row, remove FTS entry.
@@ -152,7 +186,7 @@ mod tests {
     use crate::db::schema::create_encrypted_db;
 
     #[test]
-    fn test_import_export_roundtrip() {
+    fn test_import_export_roundtrip_with_key() {
         let mk = (0..32).collect::<Vec<u8>>();
         let tmp = tempfile::TempDir::new().unwrap();
 
@@ -165,19 +199,29 @@ mod tests {
             &conn, tmp.path(), "test-doc-1",
             "Test Doc", &data, "text/plain",
             "Author", "Description", Some("hello world content"),
+            Some(&mk),
         ).unwrap();
         assert_eq!(doc_id, "test-doc-1");
 
-        // Verify file exists
-        assert!(tmp.path().join("files/test-doc-1").exists());
+        // Verify file exists (as encrypted blob)
+        let file_path = tmp.path().join("files/test-doc-1");
+        assert!(file_path.exists());
+        let raw = std::fs::read(&file_path).unwrap();
+        assert!(raw.len() > data.len()); // iv + ciphertext > plaintext
+        let db_doc = queries::get_document(&conn, "test-doc-1").unwrap().unwrap();
+        assert_eq!(&raw[..aes_gcm::IV_LENGTH], db_doc.encryption_iv.as_deref().unwrap());
 
         // Verify list
         let docs = queries::list_documents(&conn).unwrap();
         assert_eq!(docs.len(), 1);
 
-        // Export back
-        let exported = export_document_file(&conn, tmp.path(), "test-doc-1").unwrap();
+        // Export back (decrypted)
+        let exported = export_document_file(&conn, tmp.path(), "test-doc-1", Some(&mk)).unwrap();
         assert_eq!(exported, data);
+
+        // Without key — returns encrypted blob
+        let raw_export = export_document_file(&conn, tmp.path(), "test-doc-1", None).unwrap();
+        assert_ne!(raw_export, data); // encrypted, not plaintext
 
         // Verify FTS
         let results = crate::db::fts::search(&conn, "hello").unwrap();
@@ -186,7 +230,33 @@ mod tests {
 
         // Delete
         delete_document_full(&conn, tmp.path(), "test-doc-1").unwrap();
-        assert!(!tmp.path().join("files/test-doc-1").exists());
+        assert!(!file_path.exists());
         assert_eq!(queries::list_documents(&conn).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_import_export_roundtrip_no_key() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let db_path = tmp.path().join("databases/librecrate.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        let conn = crate::db::schema::open_plain(db_path.to_str().unwrap()).unwrap();
+        crate::db::schema::create_all_tables(&conn).unwrap();
+
+        let data = b"Hello, plaintext!".to_vec();
+        let _doc_id = import_document(
+            &conn, tmp.path(), "test-plain",
+            "Test Doc", &data, "text/plain",
+            "Author", "Description", None,
+            None,
+        ).unwrap();
+
+        // File stored as plaintext
+        let raw = std::fs::read(tmp.path().join("files/test-plain")).unwrap();
+        assert_eq!(raw, data);
+
+        // Export back
+        let exported = export_document_file(&conn, tmp.path(), "test-plain", None).unwrap();
+        assert_eq!(exported, data);
     }
 }

@@ -133,7 +133,7 @@ pub fn run(args: DocumentArgs) -> anyhow::Result<()> {
                 Some(doc) => {
                     if let Some(export_path) = export {
                         let vault_root = db.parent().and_then(|p| p.parent()).unwrap_or(std::path::Path::new("."));
-                        let data = storage::load_file(&vault_root, &doc.id)
+                        let data = storage::export_document_file(&conn, &vault_root, &doc.id, Some(&mk))
                             .ok_or_else(|| anyhow::anyhow!("File blob not found for document '{}'", doc.id))?;
                         std::fs::write(&export_path, data)?;
                         println!("Blob exported to {}", export_path.display());
@@ -180,6 +180,7 @@ pub fn run(args: DocumentArgs) -> anyhow::Result<()> {
                 &conn, &vault, &id, &title,
                 &file_bytes, &mime, "", "",
                 Some(&text_content),
+                Some(&mk),
             )?;
             println!("Document added with id: {}", id);
             Ok(())

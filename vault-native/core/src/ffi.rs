@@ -276,6 +276,7 @@ pub struct EncryptedDataFfi {
 #[derive(uniffi::Object)]
 pub struct DbHandle {
     inner: Arc<Mutex<rusqlite::Connection>>,
+    encryption_key: Option<Vec<u8>>,
 }
 
 #[uniffi::export]
@@ -284,21 +285,21 @@ impl DbHandle {
     pub fn open_encrypted(path: String, master_key: Vec<u8>) -> FfiResult<Self> {
         let conn = crate::db::schema::open_encrypted(&path, &master_key)
             .map_err(|e| FfiError::Database(e.to_string()))?;
-        Ok(Self { inner: Arc::new(Mutex::new(conn)) })
+        Ok(Self { inner: Arc::new(Mutex::new(conn)), encryption_key: Some(master_key) })
     }
 
     #[uniffi::constructor]
     pub fn open_plain(path: String) -> FfiResult<Self> {
         let conn = crate::db::schema::open_plain(&path)
             .map_err(|e| FfiError::Database(e.to_string()))?;
-        Ok(Self { inner: Arc::new(Mutex::new(conn)) })
+        Ok(Self { inner: Arc::new(Mutex::new(conn)), encryption_key: None })
     }
 
     #[uniffi::constructor]
     pub fn create_encrypted(path: String, master_key: Vec<u8>) -> FfiResult<Self> {
         let conn = crate::db::schema::create_encrypted_db(&path, &master_key)
             .map_err(|e| FfiError::Database(e.to_string()))?;
-        Ok(Self { inner: Arc::new(Mutex::new(conn)) })
+        Ok(Self { inner: Arc::new(Mutex::new(conn)), encryption_key: Some(master_key) })
     }
 
     pub fn list_documents(&self) -> FfiResult<Vec<DocumentFfi>> {
@@ -404,6 +405,7 @@ impl DbHandle {
         crate::db::storage::import_document(
             &conn, base, &id, &title, &file_data, &mime_type,
             &author, &description, text_content.as_deref(),
+            self.encryption_key.as_deref(),
         )
         .map_err(|e| FfiError::Database(e.to_string()))
     }
@@ -411,7 +413,7 @@ impl DbHandle {
     pub fn export_document_file(&self, base_dir: String, id: String) -> FfiResult<Option<Vec<u8>>> {
         let conn = self.inner.lock().map_err(|e| FfiError::Database(e.to_string()))?;
         let base = std::path::Path::new(&base_dir);
-        Ok(crate::db::storage::export_document_file(&conn, base, &id))
+        Ok(crate::db::storage::export_document_file(&conn, base, &id, self.encryption_key.as_deref()))
     }
 
     pub fn delete_document_full(&self, base_dir: String, id: String) -> FfiResult<bool> {
@@ -583,12 +585,18 @@ impl DbHandle {
     }
 
     pub fn store_thumbnail(&self, base_dir: String, id: String, data: Vec<u8>) -> FfiResult<()> {
-        crate::db::storage::store_thumbnail(std::path::Path::new(&base_dir), &id, &data)
-            .map_err(|e| FfiError::Io(e.to_string()))
+        crate::db::storage::store_thumbnail(
+            std::path::Path::new(&base_dir), &id, &data,
+            self.encryption_key.as_deref(),
+        )
+        .map_err(|e| FfiError::Io(e.to_string()))
     }
 
     pub fn load_thumbnail(&self, base_dir: String, id: String) -> FfiResult<Option<Vec<u8>>> {
-        Ok(crate::db::storage::load_thumbnail(std::path::Path::new(&base_dir), &id))
+        Ok(crate::db::storage::load_thumbnail(
+            std::path::Path::new(&base_dir), &id,
+            self.encryption_key.as_deref(),
+        ))
     }
 
     pub fn get_schema_version(&self) -> FfiResult<i64> {

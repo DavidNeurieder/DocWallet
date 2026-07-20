@@ -47,6 +47,7 @@ pub fn run(args: CreateArgs) -> anyhow::Result<()> {
             "",
             "",
             Some(&text),
+            Some(&master_key),
         )?;
         doc_count += 1;
     }
