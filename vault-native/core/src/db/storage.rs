@@ -46,6 +46,43 @@ pub fn delete_file(base_dir: &Path, id: &str) {
     let _ = std::fs::remove_file(&path);
 }
 
+/// Derive a `file_name` for a document. We prefer the original file name carried
+/// in `title` (e.g. "book.epub") so downstream viewers can detect the type from the
+/// extension. If `title` has no usable extension, fall back to one inferred from the
+/// MIME type, and finally to the document `id`.
+fn derive_file_name(id: &str, title: &str, mime_type: &str) -> String {
+    let title_ext = std::path::Path::new(title)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase());
+    if let Some(ext) = title_ext {
+        if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return format!("{id}.{ext}");
+        }
+    }
+    if let Some(ext) = extension_for_mime(mime_type) {
+        return format!("{id}.{ext}");
+    }
+    id.to_string()
+}
+
+/// Best-effort file extension for a MIME type (subset relevant to this app).
+fn extension_for_mime(mime: &str) -> Option<&'static str> {
+    match mime {
+        "application/pdf" => Some("pdf"),
+        "application/epub+zip" => Some("epub"),
+        "application/vnd.apple.pkpass" => Some("pkpass"),
+        "application/vnd.comicbook+zip" | "application/x-cbr" => Some("cbz"),
+        "image/png" => Some("png"),
+        "image/jpeg" => Some("jpg"),
+        "image/gif" => Some("gif"),
+        "image/webp" => Some("webp"),
+        "image/bmp" => Some("bmp"),
+        "text/markdown" | "text/plain" => Some("md"),
+        _ => None,
+    }
+}
+
 /// Import a document: store the file blob, insert DB row with IV, and index into FTS5.
 /// Returns the document ID.
 pub fn import_document(
@@ -75,7 +112,7 @@ pub fn import_document(
     let doc = DocumentRow {
         id: id.to_string(),
         title: title.to_string(),
-        file_name: id.rsplit('/').next().unwrap_or(id).to_string(),
+        file_name: derive_file_name(id, title, mime_type),
         mime_type: mime_type.to_string(),
         file_path,
         file_size: file_data.len() as i64,

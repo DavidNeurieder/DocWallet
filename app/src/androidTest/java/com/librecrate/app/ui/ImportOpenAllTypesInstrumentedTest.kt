@@ -243,6 +243,44 @@ class ImportOpenAllTypesInstrumentedTest {
         scenario.close()
     }
 
+    @Test
+    fun opensEpubViaViewerScreenShowsContent() {
+        // Mirrors the real manual flow: ViewerScreen -> ViewerViewModel builds a temp
+        // file named "viewer_<id>_<fileName>" and hands its path to EpubReaderActivity.
+        // This depends on the vault storing a ".epub" extension in fileName.
+        val epubData = resourceBytes("test.epub")
+        val docId = importDoc("book.epub", epubData, "application/epub+zip")
+
+        val fileName: String
+        var epubBytes: ByteArray?
+        runBlocking {
+            val doc = app.vaultRepository.getDocument(docId)
+            fileName = doc?.fileName ?: ""
+            epubBytes = app.vaultRepository.exportDocumentFile(docId)
+        }
+        assertNotNull("exportDocumentFile returned null", epubBytes)
+        org.junit.Assert.assertTrue(
+            "Expected fileName to carry a .epub extension, got: '$fileName'",
+            fileName.endsWith(".epub"),
+        )
+
+        val tempFile = File(app.cacheDir, "viewer_${docId}_$fileName")
+        tempFile.writeBytes(epubBytes!!)
+
+        val intent = Intent(app, com.librecrate.app.ui.viewer.EpubReaderActivity::class.java).apply {
+            putExtra("file_path", tempFile.absolutePath)
+            putExtra("document_id", docId)
+        }
+
+        val scenario = ActivityScenario.launch<com.librecrate.app.ui.viewer.EpubReaderActivity>(intent)
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+
+        val contentFound = device.wait(Until.hasObject(By.text("Hello from instrumented test!")), 10_000)
+        assertNotNull("EPUB body content not found (asset retrieval failed?)", contentFound)
+
+        scenario.close()
+    }
+
     private fun wipeDatabase(context: Context) {
         context.getDatabasePath("librecrate.db").let { dbFile ->
             dbFile.delete()
