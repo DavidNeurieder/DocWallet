@@ -34,6 +34,11 @@ class DocumentImporter(
         data class Duplicate(val document: Document) : ImportResult()
     }
 
+    private data class DocumentContent(
+        val textContent: String?,
+        val thumbnailData: ByteArray?,
+    )
+
     suspend fun importDocument(uri: Uri, mimeType: String): ImportResult? = withContext(Dispatchers.IO) {
         val tempFile = try {
             copyUriToTempFile(uri)
@@ -43,12 +48,13 @@ class DocumentImporter(
         try {
             val fileName = getFileName(uri) ?: "unknown"
             val fileData = tempFile.readBytes()
+            val content = processDocument(tempFile, mimeType)
 
             val docId = UUID.randomUUID().toString()
             val resultId = vaultRepository.importDocument(
                 id = docId, title = fileName, fileData = fileData,
                 mimeType = mimeType, author = "",
-                description = "", textContent = null,
+                description = "", textContent = content.textContent,
             )
             if (resultId == null) { ErrorLogger.logWarning(context, TAG, "importDocument returned null"); return@withContext null }
 
@@ -56,7 +62,7 @@ class DocumentImporter(
             val isDuplicate = actualId != docId
 
             if (!isDuplicate) {
-                generateThumbnail(tempFile, mimeType)?.let { thumbData ->
+                content.thumbnailData?.let { thumbData ->
                     vaultRepository.storeThumbnail(actualId, thumbData)
                 }
             }
@@ -107,25 +113,34 @@ class DocumentImporter(
         return name
     }
 
-    private suspend fun generateThumbnail(file: File, mimeType: String): ByteArray? {
+    private suspend fun processDocument(file: File, mimeType: String): DocumentContent {
         return try {
-            val bytes: ByteArray? = when {
-                mimeType == "application/pdf" ->
-                    PdfDocumentProcessor().process(file, mimeType).thumbnailData
-                mimeType == "application/epub+zip" ->
-                    EpubDocumentProcessor().process(file, mimeType).thumbnailData
-                mimeType.startsWith("image/") ->
-                    ImageProcessor().process(file, mimeType).thumbnailBitmap?.toPngBytes()
-                mimeType == "application/vnd.comicbook+zip" || mimeType == "application/x-cbr" ->
-                    ComicProcessor().process(file, mimeType).thumbnailBitmap?.toPngBytes()
-                mimeType == "application/vnd.apple.pkpass" ->
-                    PkPassProcessor().process(file, mimeType).thumbnailBitmap?.toPngBytes()
-                else -> null
+            when {
+                mimeType == "application/pdf" -> {
+                    val result = PdfDocumentProcessor().process(file, mimeType)
+                    DocumentContent(result.textContent, result.thumbnailData)
+                }
+                mimeType == "application/epub+zip" -> {
+                    val result = EpubDocumentProcessor().process(file, mimeType)
+                    DocumentContent(result.textContent, result.thumbnailData)
+                }
+                mimeType.startsWith("image/") -> {
+                    val result = ImageProcessor().process(file, mimeType)
+                    DocumentContent(null, result.thumbnailBitmap?.toPngBytes())
+                }
+                mimeType == "application/vnd.comicbook+zip" || mimeType == "application/x-cbr" -> {
+                    val result = ComicProcessor().process(file, mimeType)
+                    DocumentContent(null, result.thumbnailBitmap?.toPngBytes())
+                }
+                mimeType == "application/vnd.apple.pkpass" -> {
+                    val result = PkPassProcessor().process(file, mimeType)
+                    DocumentContent(null, result.thumbnailBitmap?.toPngBytes())
+                }
+                else -> DocumentContent(null, null)
             }
-            bytes
         } catch (e: Exception) {
-            ErrorLogger.logWarning(context, TAG, "Failed to generate thumbnail", e)
-            null
+            ErrorLogger.logWarning(context, TAG, "Failed to process document", e)
+            DocumentContent(null, null)
         }
     }
 

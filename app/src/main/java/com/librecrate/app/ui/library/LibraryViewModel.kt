@@ -21,6 +21,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -79,30 +84,29 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val searchResults: StateFlow<List<SearchResultItem>> = combine(
-        vault.documents,
-        searchQuery,
-    ) { docs: List<Document>, query: String ->
-        if (query.isBlank()) return@combine emptyList()
-        val q = query.lowercase()
-        docs.filter { doc ->
-            doc.title.lowercase().contains(q) ||
-            doc.author.lowercase().contains(q) ||
-            doc.description.lowercase().contains(q)
-        }.map { doc ->
-            SearchResultItem(
-                id = doc.id,
-                title = doc.title,
-                mimeType = doc.mimeType,
-                pageCount = doc.pageCount,
-                author = doc.author,
-                thumbnailPath = doc.thumbnailPath,
-                matches = listOf(
-                    SearchResultMatch(snippet = doc.description, pageNumber = doc.currentPage)
-                ),
-            )
+    val searchResults: StateFlow<List<SearchResultItem>> = searchQuery
+        .debounce(300)
+        .flatMapLatest { query ->
+            if (query.length < 3) return@flatMapLatest flowOf(emptyList())
+            flow {
+                val docs = vault.documents.first()
+                val docMap = docs.associateBy { it.id }
+                val ftsResults = vault.searchDocumentsWithSnippet(query)
+                emit(ftsResults.map { ffi ->
+                    val doc = docMap[ffi.id]
+                    SearchResultItem(
+                        id = ffi.id,
+                        title = ffi.title,
+                        mimeType = doc?.mimeType ?: "",
+                        pageCount = doc?.pageCount ?: 0,
+                        author = doc?.author ?: "",
+                        thumbnailPath = doc?.thumbnailPath,
+                        matches = listOf(SearchResultMatch(snippet = ffi.snippet, pageNumber = 0)),
+                    )
+                })
+            }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         viewModelScope.launch { vault.documents.collect { _isLoading.value = false } }

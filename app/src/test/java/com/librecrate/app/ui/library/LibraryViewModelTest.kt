@@ -3,6 +3,7 @@ package com.librecrate.app.ui.library
 import com.librecrate.app.LibreCrateApplication
 import com.librecrate.app.data.model.Document
 import com.librecrate.app.data.vault.VaultRepository
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import uniffi.vault_native.SnippetResultFfi
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -71,6 +73,9 @@ class LibraryViewModelTest {
                 description = "The quick fox jumps",
             )
         )
+        coEvery { mockVault.searchDocumentsWithSnippet("fox") } returns listOf(
+            SnippetResultFfi(rank = 1.0, id = "1", title = "Doc One", snippet = "The quick <b>fox</b> jumps"),
+        )
 
         viewModel.search("fox")
         advanceUntilIdle()
@@ -88,6 +93,9 @@ class LibraryViewModelTest {
                 mimeType = "text/plain",
                 description = "some text",
             )
+        )
+        coEvery { mockVault.searchDocumentsWithSnippet("text") } returns listOf(
+            SnippetResultFfi(rank = 1.0, id = "1", title = "Doc", snippet = "some <b>text</b>"),
         )
 
         viewModel.search("text")
@@ -113,6 +121,9 @@ class LibraryViewModelTest {
                 mimeType = "application/pdf", author = "Nature",
                 description = "the quick rabbit",
             )
+        )
+        coEvery { mockVault.searchDocumentsWithSnippet("rabbit") } returns listOf(
+            SnippetResultFfi(rank = 1.0, id = "2", title = "Rabbit Facts", snippet = "the quick <b>rabbit</b>"),
         )
 
         viewModel.search("rabbit")
