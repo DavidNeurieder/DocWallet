@@ -3,6 +3,7 @@ package com.librecrate.app.data.import
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.github.junrar.Archive
+import com.librecrate.app.util.ErrorLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -63,7 +64,8 @@ class ComicProcessor : DocumentProcessor {
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            ErrorLogger.logWarning(null, "ComicProcessor", "readZipEntries failed", e)
         }
         return result
     }
@@ -74,7 +76,8 @@ class ComicProcessor : DocumentProcessor {
                 val entry = zip.getEntry(entryName) ?: return@use null
                 BitmapFactory.decodeStream(zip.getInputStream(entry))
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            ErrorLogger.logWarning(null, "ComicProcessor", "decodeZipImage failed", e)
             null
         }
     }
@@ -91,7 +94,8 @@ class ComicProcessor : DocumentProcessor {
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            ErrorLogger.logWarning(null, "ComicProcessor", "readRarEntries failed", e)
         }
         return result
     }
@@ -107,7 +111,8 @@ class ComicProcessor : DocumentProcessor {
                     }
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            ErrorLogger.logWarning(null, "ComicProcessor", "decodeRarImage failed", e)
             null
         }
     }

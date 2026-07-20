@@ -25,6 +25,7 @@ pub struct DocumentRow {
     pub reading_position: Option<String>,
     pub barcode_format: Option<String>,
     pub barcode_value: Option<String>,
+    pub content_hash: Option<String>,
 }
 
 impl Default for DocumentRow {
@@ -52,6 +53,7 @@ impl Default for DocumentRow {
             reading_position: None,
             barcode_format: None,
             barcode_value: None,
+            content_hash: None,
         }
     }
 }
@@ -96,6 +98,7 @@ pub(crate) fn document_from_row(row: &rusqlite::Row) -> rusqlite::Result<Documen
         reading_position: row.get(19)?,
         barcode_format: row.get(20)?,
         barcode_value: row.get(21)?,
+        content_hash: row.get(22)?,
     })
 }
 
@@ -103,7 +106,8 @@ const DOCUMENT_COLUMNS: &str =
     "id, title, file_name, mime_type, file_path, file_size, page_count, \
      author, description, thumbnail_path, imported_at, last_opened_at, \
      modified_at, is_favorite, is_conflict, conflict_with, collection_id, \
-     encryption_iv, current_page, reading_position, barcode_format, barcode_value";
+     encryption_iv, current_page, reading_position, barcode_format, barcode_value, \
+     content_hash";
 
 pub fn list_documents(conn: &Connection) -> Result<Vec<DocumentRow>> {
     let sql = format!("SELECT {DOCUMENT_COLUMNS} FROM documents ORDER BY title");
@@ -176,21 +180,31 @@ pub fn get_document(conn: &Connection, id: &str) -> Result<Option<DocumentRow>> 
     }
 }
 
+pub fn find_document_by_hash(conn: &Connection, hash: &str) -> Result<Option<DocumentRow>> {
+    let sql = format!("SELECT {DOCUMENT_COLUMNS} FROM documents WHERE content_hash = ?");
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query(params![hash])?;
+    match rows.next()? {
+        Some(row) => Ok(Some(document_from_row(row)?)),
+        None => Ok(None),
+    }
+}
+
 pub fn add_document(conn: &Connection, doc: &DocumentRow) -> Result<()> {
     conn.execute(
         "INSERT INTO documents (id, title, file_name, mime_type, file_path, file_size, page_count,
          author, description, thumbnail_path, imported_at, last_opened_at, modified_at,
          is_favorite, is_conflict, conflict_with, collection_id, encryption_iv, current_page,
-         reading_position, barcode_format, barcode_value)
+         reading_position, barcode_format, barcode_value, content_hash)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-         ?20, ?21, ?22)",
+         ?20, ?21, ?22, ?23)",
         params![
             doc.id, doc.title, doc.file_name, doc.mime_type, doc.file_path,
             doc.file_size, doc.page_count, doc.author, doc.description, doc.thumbnail_path,
             doc.imported_at, doc.last_opened_at, doc.modified_at,
             doc.is_favorite as i32, doc.is_conflict as i32, doc.conflict_with, doc.collection_id,
             doc.encryption_iv, doc.current_page,
-            doc.reading_position, doc.barcode_format, doc.barcode_value,
+            doc.reading_position, doc.barcode_format, doc.barcode_value, doc.content_hash,
         ],
     )?;
     Ok(())

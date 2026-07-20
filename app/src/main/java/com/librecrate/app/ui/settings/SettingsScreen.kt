@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.librecrate.app.data.AppPreferencesStore
 import com.librecrate.app.domain.BackupProgress
+import com.librecrate.app.util.ErrorLogger
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -586,7 +587,8 @@ private fun AboutSection(context: Context) {
     val versionName = remember {
         try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            ErrorLogger.logWarning(context, "SettingsScreen", "Failed to get version name", e)
             "?"
         }
     }

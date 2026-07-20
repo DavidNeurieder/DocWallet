@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.librecrate.app.util.ErrorLogger
 import com.github.junrar.Archive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -253,7 +254,8 @@ private fun loadComicPageInfos(file: File): List<ComicPageInfo> {
             else -> emptyList()
         }
         entries.mapIndexed { index, entryName -> ComicPageInfo(index, entryName) }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "ComicViewer", "loadComicPageInfos failed", e)
         emptyList()
     }
 }
@@ -267,7 +269,8 @@ private fun loadCbzEntries(file: File): List<String> {
                 .map { it.name }
                 .toList()
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "ComicViewer", "loadCbzEntries failed", e)
         emptyList()
     }
 }
@@ -282,7 +285,8 @@ private fun loadRarEntries(file: File): List<String> {
                     .map { it.fileName }
             }
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "ComicViewer", "loadRarEntries failed", e)
         emptyList()
     }
 }
@@ -299,7 +303,8 @@ private fun decodeSinglePage(file: File, entryName: String, maxWidth: Int): Bitm
             val h = (maxWidth * bitmap.height) / bitmap.width
             Bitmap.createScaledBitmap(bitmap, maxWidth, h.coerceAtLeast(1), true)
         } else bitmap
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "ComicViewer", "decodeSinglePage failed", e)
         null
     }
 }
@@ -322,7 +327,8 @@ private fun decodeCbzEntry(file: File, entryName: String): Bitmap? {
                 }
             }
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "ComicViewer", "decodeCbzEntry failed", e)
         null
     }
 }
@@ -347,7 +353,8 @@ private fun decodeRarEntry(file: File, entryName: String): Bitmap? {
                 }
             }
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "ComicViewer", "decodeRarEntry failed", e)
         null
     }
 }

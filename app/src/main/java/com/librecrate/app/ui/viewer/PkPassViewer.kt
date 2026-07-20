@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.librecrate.app.ui.common.BarcodeImage
+import com.librecrate.app.util.ErrorLogger
 import org.json.JSONObject
 import java.io.File
 import java.util.zip.ZipFile
@@ -331,6 +332,7 @@ private fun parsePkPass(file: File): PassData? {
             )
         }
     } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "PkPassViewer", "parsePkPass failed", e)
         return null
     }
 }
@@ -385,6 +387,7 @@ private fun parseColorString(colorStr: String): Color? {
             )
         }
     } catch (e: Exception) {
+        ErrorLogger.logWarning(null, "PkPassViewer", "parseColorString failed", e)
         null
     }
 }

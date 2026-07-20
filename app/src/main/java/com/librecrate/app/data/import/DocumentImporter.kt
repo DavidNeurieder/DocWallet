@@ -4,8 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Log
 import com.librecrate.app.data.import.ComicProcessor
+import com.librecrate.app.util.ErrorLogger
 import com.librecrate.app.data.import.ImageProcessor
 import com.librecrate.app.data.import.PkPassProcessor
 import com.librecrate.app.data.model.Document
@@ -33,7 +33,7 @@ class DocumentImporter(
         val tempFile = try {
             copyUriToTempFile(uri)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy temp file", e); return@withContext null
+            ErrorLogger.logException(context, TAG, "Failed to copy temp file", e); return@withContext null
         }
         try {
             val fileName = getFileName(uri) ?: "unknown"
@@ -45,7 +45,7 @@ class DocumentImporter(
                 mimeType = mimeType, author = "",
                 description = "", textContent = null,
             )
-            if (resultId == null) { Log.e(TAG, "importDocument returned null"); return@withContext null }
+            if (resultId == null) { ErrorLogger.logWarning(context, TAG, "importDocument returned null"); return@withContext null }
 
             generateThumbnail(tempFile, mimeType)?.let { thumbData ->
                 vaultRepository.storeThumbnail(docId, thumbData)
@@ -53,7 +53,7 @@ class DocumentImporter(
 
             vaultRepository.getDocument(docId)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to import document", e); null
+            ErrorLogger.logException(context, TAG, "Failed to import document", e); null
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
@@ -68,7 +68,7 @@ class DocumentImporter(
             mimeType = "text/markdown", author = "",
             description = content.take(200), textContent = content,
         )
-        if (resultId == null) { Log.e(TAG, "importNote returned null"); return@withContext null }
+        if (resultId == null) { ErrorLogger.logWarning(context, TAG, "importNote returned null"); return@withContext null }
         vaultRepository.getDocument(docId)
     }
 
@@ -108,7 +108,7 @@ class DocumentImporter(
             }
             bytes
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate thumbnail", e)
+            ErrorLogger.logWarning(context, TAG, "Failed to generate thumbnail", e)
             null
         }
     }

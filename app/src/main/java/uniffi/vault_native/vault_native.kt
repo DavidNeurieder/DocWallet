@@ -871,6 +871,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_vault_native_fn_method_dbhandle_get_document(`ptr`: Pointer,`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_vault_native_fn_method_dbhandle_find_document_by_hash(`ptr`: Pointer,`hash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_vault_native_fn_method_dbhandle_get_documents_for_tag(`ptr`: Pointer,`tagId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_vault_native_fn_method_dbhandle_get_schema_version(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
@@ -1767,6 +1769,8 @@ public interface DbHandleInterface {
     
     fun `getDocument`(`id`: kotlin.String): DocumentFfi?
     
+    fun `findDocumentByHash`(`hash`: kotlin.String): DocumentFfi?
+    
     fun `getDocumentsForTag`(`tagId`: kotlin.String): List<DocumentFfi>
     
     fun `getSchemaVersion`(): kotlin.Long
@@ -2032,6 +2036,19 @@ open class DbHandle: Disposable, AutoCloseable, DbHandleInterface {
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_vault_native_fn_method_dbhandle_get_document(
         it, FfiConverterString.lower(`id`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(FfiException::class)override fun `findDocumentByHash`(`hash`: kotlin.String): DocumentFfi? {
+            return FfiConverterOptionalTypeDocumentFfi.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vault_native_fn_method_dbhandle_find_document_by_hash(
+        it, FfiConverterString.lower(`hash`),_status)
 }
     }
     )
@@ -2524,7 +2541,8 @@ data class DocumentFfi (
     var `currentPage`: kotlin.Int, 
     var `readingPosition`: kotlin.String?, 
     var `barcodeFormat`: kotlin.String?, 
-    var `barcodeValue`: kotlin.String?
+    var `barcodeValue`: kotlin.String?,
+    var `contentHash`: kotlin.String?
 ) {
     
     companion object
@@ -2558,6 +2576,7 @@ public object FfiConverterTypeDocumentFfi: FfiConverterRustBuffer<DocumentFfi> {
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -2583,7 +2602,8 @@ public object FfiConverterTypeDocumentFfi: FfiConverterRustBuffer<DocumentFfi> {
             FfiConverterInt.allocationSize(value.`currentPage`) +
             FfiConverterOptionalString.allocationSize(value.`readingPosition`) +
             FfiConverterOptionalString.allocationSize(value.`barcodeFormat`) +
-            FfiConverterOptionalString.allocationSize(value.`barcodeValue`)
+            FfiConverterOptionalString.allocationSize(value.`barcodeValue`) +
+            FfiConverterOptionalString.allocationSize(value.`contentHash`)
     )
 
     override fun write(value: DocumentFfi, buf: ByteBuffer) {
@@ -2609,6 +2629,7 @@ public object FfiConverterTypeDocumentFfi: FfiConverterRustBuffer<DocumentFfi> {
             FfiConverterOptionalString.write(value.`readingPosition`, buf)
             FfiConverterOptionalString.write(value.`barcodeFormat`, buf)
             FfiConverterOptionalString.write(value.`barcodeValue`, buf)
+            FfiConverterOptionalString.write(value.`contentHash`, buf)
     }
 }
 

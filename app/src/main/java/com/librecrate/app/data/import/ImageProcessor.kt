@@ -3,6 +3,7 @@ package com.librecrate.app.data.import
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.ExifInterface
+import com.librecrate.app.util.ErrorLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -17,7 +18,8 @@ class ImageProcessor : DocumentProcessor {
         val exifTitle = try {
             val exif = ExifInterface(input.absolutePath)
             exif.getAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION) ?: ""
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            ErrorLogger.logWarning(null, "ImageProcessor", "Failed to read EXIF", e)
             ""
         }
 

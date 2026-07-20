@@ -152,8 +152,10 @@ pub fn branch_a_merge(
                 }
                 Ok(existing) => {
                     // Detect conflict: file content differs
-                    let content_differs = existing.file_size != doc.file_size
-                        || existing.mime_type != doc.mime_type;
+                    let content_differs = match (existing.content_hash.as_deref(), doc.content_hash.as_deref()) {
+                        (Some(a), Some(b)) => a != b,
+                        _ => existing.file_size != doc.file_size || existing.mime_type != doc.mime_type,
+                    };
 
                     if content_differs {
                         // Mark existing as conflict

@@ -2,6 +2,7 @@ package com.librecrate.app.domain
 
 import android.util.Log
 import com.librecrate.app.data.vault.VaultRepository
+import com.librecrate.app.util.ErrorLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uniffi.vault_native.KeyValueFfi
@@ -24,7 +25,7 @@ class DatabaseMerger(
                 true
             } else false
         } catch (e: Exception) {
-            Log.e(TAG, "Database merge failed", e); false
+            ErrorLogger.logException(null, TAG, "Database merge failed", e); false
         }
     }
 

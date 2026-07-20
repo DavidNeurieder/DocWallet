@@ -1,6 +1,6 @@
 package com.librecrate.app.data.encryption
 
-import android.util.Log
+import com.librecrate.app.util.ErrorLogger
 import uniffi.vault_native.*
 import java.io.File
 import java.security.SecureRandom
@@ -34,7 +34,7 @@ class RustKeyManager(
             sessionMasterKey = masterKey
             true
         } catch (e: Exception) {
-            Log.e(TAG, "initializeWithPassword failed", e); false
+            ErrorLogger.logException(null, TAG, "initializeWithPassword failed", e); false
         }
     }
 
@@ -56,6 +56,7 @@ class RustKeyManager(
             }
             result
         } catch (e: Exception) {
+            ErrorLogger.logException(null, TAG, "verifyPassword failed", e)
             sessionMasterKey = null; false
         }
     }
@@ -78,7 +79,7 @@ class RustKeyManager(
             sessionMasterKey = masterKey
             true
         } catch (e: Exception) {
-            Log.e(TAG, "changePassword failed", e); false
+            ErrorLogger.logException(null, TAG, "changePassword failed", e); false
         }
     }
 
@@ -95,7 +96,7 @@ class RustKeyManager(
             val iv = data.copyOfRange(0, 12)
             val ciphertext = data.copyOfRange(12, data.size)
             crypto.decrypt(iv, ciphertext)
-        } catch (e: Exception) { Log.w(TAG, "resolveDeviceKeyForBackup failed", e); null }
+        } catch (e: Exception) { ErrorLogger.logWarning(null, TAG, "resolveDeviceKeyForBackup failed", e); null }
     }
 
     fun setupDeviceKeyForDailyUnlock(): Boolean {
@@ -103,7 +104,7 @@ class RustKeyManager(
         return try {
             val (iv, encrypted) = crypto.encrypt(masterKey)
             keyStore.write(DEVICE_WRAPPED_KEY_FILE, iv + encrypted); true
-        } catch (e: Exception) { Log.e(TAG, "setupDeviceKeyForDailyUnlock failed", e); false }
+        } catch (e: Exception) { ErrorLogger.logException(null, TAG, "setupDeviceKeyForDailyUnlock failed", e); false }
     }
 
     companion object {

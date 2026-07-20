@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.librecrate.app.LibreCrateApplication
+import com.librecrate.app.util.ErrorLogger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,6 +42,7 @@ class UnlockViewModel @JvmOverloads constructor(
             val verified = try {
                 encryptionManager.verifyPassword(password)
             } catch (e: Exception) {
+                ErrorLogger.logException(app, TAG, "verifyPassword failed", e)
                 withContext(Dispatchers.Main) { error = "Error: ${e.message}" }; null
             }
             withContext(Dispatchers.Main) {
@@ -57,4 +59,8 @@ class UnlockViewModel @JvmOverloads constructor(
     }
 
     fun clearError() { error = null }
+
+    companion object {
+        private const val TAG = "UnlockViewModel"
+    }
 }

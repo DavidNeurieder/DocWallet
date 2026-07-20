@@ -35,6 +35,7 @@ class LibreCrateApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         encryptionManager = EncryptionManager(this)
         vaultRepository = VaultRepository(this)
         registerActivityLifecycleCallbacks(ActivityLifecycleLockCallbacks(encryptionManager, this))
@@ -45,6 +46,8 @@ class LibreCrateApplication : Application() {
     }
 
     companion object {
+        lateinit var instance: LibreCrateApplication
+            private set
         private const val TAG = "LibreCrateApp"
     }
 }

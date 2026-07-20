@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.librecrate.app.LibreCrateApplication
 import com.librecrate.app.data.model.Document
+import com.librecrate.app.util.ErrorLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -77,7 +78,8 @@ fun NoteEditor(
         val content = withContext(Dispatchers.IO) {
             try {
                 File(filePath).readText()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                ErrorLogger.logWarning(context, "NoteEditor", "Failed to read note file", e)
                 vault.exportDocumentFile(document.id)?.decodeToString() ?: ""
             }
         }
@@ -125,7 +127,7 @@ fun NoteEditor(
 
         Box(modifier = Modifier.fillMaxWidth().weight(0.5f).padding(8.dp)) {
             val html = remember(text, parser, htmlRenderer) {
-                try { val node: Node = parser.parse(text); htmlRenderer.render(node) } catch (_: Exception) { "<p>Preview error</p>" }
+                try { val node: Node = parser.parse(text); htmlRenderer.render(node) } catch (e: Exception) { ErrorLogger.logWarning(context, "NoteEditor", "Preview render failed", e); "<p>Preview error</p>" }
             }
             AndroidView(
                 factory = { ctx ->

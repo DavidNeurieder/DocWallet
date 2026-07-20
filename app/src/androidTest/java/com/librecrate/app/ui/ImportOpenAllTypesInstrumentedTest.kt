@@ -305,22 +305,24 @@ class ImportOpenAllTypesInstrumentedTest {
         }
         ActivityScenario.launch<com.librecrate.app.ui.viewer.EpubReaderActivity>(intent)
 
-        com.librecrate.app.util.ErrorLogger.logNow(
+        com.librecrate.app.util.ErrorLogger.logExceptionNow(
             context,
             "EpubReaderActivity",
             "Failed to open EPUB",
             RuntimeException("Asset retrieval failed: An error occurred when trying to read asset."),
         )
 
-        val file = File(
+        val dir = File(
             context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
-            "LibreCrate/errors.log",
+            "LibreCrate",
         )
-        org.junit.Assert.assertTrue("errors.log not found at ${file.absolutePath}", file.exists())
-        org.junit.Assert.assertTrue("errors.log is empty", file.length() > 0)
-        val content = file.readText()
+        val files = dir.listFiles { f -> f.name.startsWith("error-") && f.name.endsWith(".log") } ?: emptyArray()
+        org.junit.Assert.assertTrue("No error log files found in ${dir.absolutePath}", files.isNotEmpty())
+        val latest = files.maxByOrNull { it.lastModified() }!!
+        org.junit.Assert.assertTrue("Error log is empty", latest.length() > 0)
+        val content = latest.readText()
         org.junit.Assert.assertTrue(
-            "errors.log missing expected content",
+            "Error log missing expected content",
             content.contains("Failed to open EPUB") && content.contains("Asset retrieval failed"),
         )
     }

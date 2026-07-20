@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.librecrate.app.LibreCrateApplication
 import com.librecrate.app.data.model.Document
+import com.librecrate.app.util.ErrorLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -115,7 +116,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
                     } ?: run { tempZip.delete(); return@withContext false }
                     tempZip.delete(); true
                 } catch (e: Exception) {
-                    android.util.Log.e("ExportVM", "Export failed", e)
+                    ErrorLogger.logException(app, "ExportVM", "Export failed", e)
                     _message.value = "Export failed: ${e.localizedMessage ?: "Unknown error"}"
                     false
                 }

@@ -1,6 +1,7 @@
 use crate::crypto::aes_gcm;
 use crate::db::queries::{self, DocumentRow};
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 use std::path::Path;
 
 /// Save a thumbnail blob at `base_dir/files/<id>.thumb`.
@@ -111,6 +112,14 @@ pub fn import_document(
     text_content: Option<&str>,
     key: Option<&[u8]>,
 ) -> rusqlite::Result<String> {
+    // Compute content hash for deduplication
+    let content_hash = hex::encode(Sha256::digest(file_data));
+
+    // Check for existing document with the same hash
+    if let Some(existing) = queries::find_document_by_hash(conn, &content_hash)? {
+        return Ok(existing.id);
+    }
+
     let (stored_data, iv): (Vec<u8>, Vec<u8>) = if let Some(k) = key {
         let (real_iv, ct) = aes_gcm::encrypt_bytes(file_data, k)
             .ok_or_else(|| rusqlite::Error::ToSqlConversionFailure(
@@ -148,6 +157,7 @@ pub fn import_document(
         last_opened_at: now,
         modified_at: now,
         encryption_iv: Some(iv),
+        content_hash: Some(content_hash),
         ..Default::default()
     };
 

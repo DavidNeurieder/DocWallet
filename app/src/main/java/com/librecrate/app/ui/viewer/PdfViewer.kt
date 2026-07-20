@@ -1,8 +1,9 @@
 package com.librecrate.app.ui.viewer
 
 import android.graphics.Bitmap
-import android.util.Log
 import androidx.compose.foundation.Image
+import androidx.compose.ui.platform.LocalContext
+import com.librecrate.app.util.ErrorLogger
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -61,6 +62,7 @@ fun PdfViewer(
     onPageChanged: (Int) -> Unit = {},
     pdfPreferences: PdfPreferences = PdfPreferences(),
 ) {
+    val context = LocalContext.current
     val reader = remember { PdfDocumentReader(file.absolutePath) }
 
     DisposableEffect(Unit) {
@@ -80,7 +82,7 @@ fun PdfViewer(
                 try {
                     reader.pageCount
                 } catch (e: Exception) {
-                    Log.w("PdfViewer", "Failed to load page count", e)
+                    ErrorLogger.logWarning(context, "PdfViewer", "Failed to load page count", e)
                     0
                 }
             }
@@ -104,7 +106,7 @@ fun PdfViewer(
                         val rendered = reader.renderPage(i, config)
                         renderedPages[i] = rendered.toBitmap()
                     } catch (e: Exception) {
-                        Log.e("PdfViewer", "Failed to render page $i", e)
+                        ErrorLogger.logWarning(context, "PdfViewer", "Failed to render page $i", e)
                     }
                 }
             }

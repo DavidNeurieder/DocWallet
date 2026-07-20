@@ -34,7 +34,8 @@ pub fn create_all_tables(conn: &Connection) -> rusqlite::Result<()> {
             barcode_format TEXT,
             barcode_value TEXT,
             current_page INTEGER NOT NULL DEFAULT 0,
-            reading_position TEXT
+            reading_position TEXT,
+            content_hash TEXT
         );
 
         CREATE TABLE IF NOT EXISTS tags (
@@ -70,6 +71,21 @@ pub fn create_all_tables(conn: &Connection) -> rusqlite::Result<()> {
         ",
     )?;
 
+    Ok(())
+}
+
+/// Schema version history:
+///   0 — initial
+///   1 — add content_hash column
+
+/// Migrate the schema from an older version to the current version.
+pub fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
+    let version = get_schema_version(conn)?;
+    if version < 1 {
+        conn.execute_batch("ALTER TABLE documents ADD COLUMN content_hash TEXT")?;
+        set_schema_version(conn, 1)?;
+    }
+    migrate_schema(conn)?;
     Ok(())
 }
 

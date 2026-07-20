@@ -1,7 +1,7 @@
 package com.librecrate.app.ui.viewer
 
 import android.app.Application
-import android.util.Log
+import com.librecrate.app.util.ErrorLogger
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.librecrate.app.LibreCrateApplication
@@ -68,7 +68,7 @@ class ViewerViewModel @JvmOverloads constructor(
                         _isLoading.value = false; return@launch
                     }
                 }
-                Log.w(TAG, "Document not found for id=$documentId")
+                ErrorLogger.logWarning(app, TAG, "Document not found for id=$documentId")
                 SessionStore.clearLastDocumentId(app)
                 _error.value = "Document not found"
                 _isLoading.value = false; return@launch
@@ -152,7 +152,7 @@ class ViewerViewModel @JvmOverloads constructor(
 
     fun cleanupTempFiles() {
         _decryptedFile.value?.let { file ->
-            try { if (file.exists()) file.delete() } catch (_: Exception) {}
+            try { if (file.exists()) file.delete() } catch (e: Exception) { ErrorLogger.logWarning(app, TAG, "cleanupTempFiles failed", e) }
         }
     }
 

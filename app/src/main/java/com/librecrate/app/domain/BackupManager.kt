@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.librecrate.app.data.encryption.EncryptionManager
+import com.librecrate.app.util.ErrorLogger
 import com.librecrate.app.data.vault.VaultRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -64,7 +65,7 @@ class BackupManager(
             Log.d(TAG, "Export complete: ${vaultBytes.size} bytes, ${files.size} documents")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "exportBackup failed", e); false
+            ErrorLogger.logException(context, TAG, "exportBackup failed", e); false
         }
     }
 
@@ -91,7 +92,7 @@ class BackupManager(
             onProgress(BackupProgress("Restore complete", 1.0f))
             true
         } catch (e: Exception) {
-            Log.e(TAG, "importBackup failed", e); false
+            ErrorLogger.logException(context, TAG, "importBackup failed", e); false
         }
     }
 
@@ -109,7 +110,7 @@ class BackupManager(
             tempFile.delete()
             onProgress(BackupProgress("Export complete", 1.0f)); true
         } catch (e: Exception) {
-            Log.e(TAG, "exportBackupToUri failed", e); false
+            ErrorLogger.logException(context, TAG, "exportBackupToUri failed", e); false
         }
     }
 
@@ -127,7 +128,7 @@ class BackupManager(
             val success = importBackup(tempFile, vaultPassword, onProgress)
             tempFile.delete(); success
         } catch (e: Exception) {
-            Log.e(TAG, "importBackupFromUri failed", e); false
+            ErrorLogger.logException(context, TAG, "importBackupFromUri failed", e); false
         }
     }
 

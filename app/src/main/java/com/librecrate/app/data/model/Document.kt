@@ -23,4 +23,5 @@ data class Document(
     val barcodeValue: String? = null,
     val currentPage: Int = 0,
     val readingPosition: String? = null,
+    val contentHash: String? = null,
 )

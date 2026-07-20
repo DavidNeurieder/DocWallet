@@ -26,8 +26,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
+import com.librecrate.app.util.ErrorLogger
 import com.librecrate.app.data.model.Document
 import java.io.File
 
@@ -36,6 +38,7 @@ fun ImageViewer(
     file: File,
     document: Document,
 ) {
+    val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -89,7 +92,8 @@ fun ImageViewer(
                 val w = opts.outWidth
                 val h = opts.outHeight
                 if (w > 0 && h > 0) "${w} \u00D7 ${h}px" else null
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                ErrorLogger.logWarning(context, "ImageViewer", "Failed to get image dimensions", e)
                 null
             }
         }

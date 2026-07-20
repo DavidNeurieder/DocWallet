@@ -1,8 +1,8 @@
 package com.librecrate.app.data.vault
 
 import android.content.Context
-import android.util.Log
 import com.librecrate.app.data.model.Collection
+import com.librecrate.app.util.ErrorLogger
 import com.librecrate.app.data.model.Document
 import com.librecrate.app.data.model.Tag
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +42,7 @@ class VaultRepository(private val context: Context) {
             refreshAll()
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open DB", e)
+            ErrorLogger.logException(context, TAG, "Failed to open DB", e)
             false
         }
     }
@@ -86,13 +86,17 @@ class VaultRepository(private val context: Context) {
         handle?.getDocument(id)?.toUiModel()
     }
 
+    suspend fun findDocumentByHash(hash: String): Document? = withContext(Dispatchers.IO) {
+        handle?.findDocumentByHash(hash)?.toUiModel()
+    }
+
     suspend fun addDocument(doc: Document): Boolean = withContext(Dispatchers.IO) {
         try {
             handle?.addDocument(doc.toFfi())
             refreshAll()
             true
         } catch (e: Exception) {
-            Log.e(TAG, "addDocument failed", e); false
+            ErrorLogger.logException(context, TAG, "addDocument failed", e); false
         }
     }
 
@@ -102,7 +106,7 @@ class VaultRepository(private val context: Context) {
             refreshAll()
             true
         } catch (e: Exception) {
-            Log.e(TAG, "addDocumentFull failed", e); false
+            ErrorLogger.logException(context, TAG, "addDocumentFull failed", e); false
         }
     }
 
@@ -136,7 +140,7 @@ class VaultRepository(private val context: Context) {
             if (result) refreshAll()
             result
         } catch (e: Exception) {
-            Log.e(TAG, "updateDocument failed", e); false
+            ErrorLogger.logException(context, TAG, "updateDocument failed", e); false
         }
     }
 
@@ -153,7 +157,7 @@ class VaultRepository(private val context: Context) {
             if (result) refreshAll()
             result
         } catch (e: Exception) {
-            Log.e(TAG, "updateDocumentFull failed", e); false
+            ErrorLogger.logException(context, TAG, "updateDocumentFull failed", e); false
         }
     }
 
@@ -161,7 +165,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.setReadingPosition(id, position) ?: false
         } catch (e: Exception) {
-            Log.e(TAG, "setReadingPosition failed", e); false
+            ErrorLogger.logException(context, TAG, "setReadingPosition failed", e); false
         }
     }
 
@@ -169,7 +173,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.setCurrentPage(id, page) ?: false
         } catch (e: Exception) {
-            Log.e(TAG, "setCurrentPage failed", e); false
+            ErrorLogger.logException(context, TAG, "setCurrentPage failed", e); false
         }
     }
 
@@ -182,7 +186,7 @@ class VaultRepository(private val context: Context) {
             handle?.addCollection(collection.toFfi())
             refreshAll(); true
         } catch (e: Exception) {
-            Log.e(TAG, "addCollection failed", e); false
+            ErrorLogger.logException(context, TAG, "addCollection failed", e); false
         }
     }
 
@@ -196,7 +200,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.updateCollection(id, name, icon, sortOrder, parentId) ?: false
         } catch (e: Exception) {
-            Log.e(TAG, "updateCollection failed", e); false
+            ErrorLogger.logException(context, TAG, "updateCollection failed", e); false
         }
     }
 
@@ -215,7 +219,7 @@ class VaultRepository(private val context: Context) {
             handle?.addTag(tag.toFfi())
             refreshAll(); true
         } catch (e: Exception) {
-            Log.e(TAG, "addTag failed", e); false
+            ErrorLogger.logException(context, TAG, "addTag failed", e); false
         }
     }
 
@@ -223,7 +227,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.updateTag(id, name, color) ?: false
         } catch (e: Exception) {
-            Log.e(TAG, "updateTag failed", e); false
+            ErrorLogger.logException(context, TAG, "updateTag failed", e); false
         }
     }
 
@@ -238,7 +242,7 @@ class VaultRepository(private val context: Context) {
             handle?.linkDocumentTag(documentId, tagId)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "linkDocumentTag failed", e); false
+            ErrorLogger.logException(context, TAG, "linkDocumentTag failed", e); false
         }
     }
 
@@ -246,7 +250,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.unlinkDocumentTag(documentId, tagId) ?: false
         } catch (e: Exception) {
-            Log.e(TAG, "unlinkDocumentTag failed", e); false
+            ErrorLogger.logException(context, TAG, "unlinkDocumentTag failed", e); false
         }
     }
 
@@ -279,7 +283,7 @@ class VaultRepository(private val context: Context) {
             handle?.rebuildFtsIndex()
             true
         } catch (e: Exception) {
-            Log.e(TAG, "rebuildFtsIndex failed", e); false
+            ErrorLogger.logException(context, TAG, "rebuildFtsIndex failed", e); false
         }
     }
 
@@ -300,7 +304,7 @@ class VaultRepository(private val context: Context) {
             refreshAll()
             result
         } catch (e: Exception) {
-            Log.e(TAG, "importDocument failed", e); null
+            ErrorLogger.logException(context, TAG, "importDocument failed", e); null
         }
     }
 
@@ -308,7 +312,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.exportDocumentFile(context.filesDir.absolutePath, id)
         } catch (e: Exception) {
-            Log.e(TAG, "exportDocumentFile failed", e); null
+            ErrorLogger.logException(context, TAG, "exportDocumentFile failed", e); null
         }
     }
 
@@ -318,7 +322,7 @@ class VaultRepository(private val context: Context) {
             if (deleted) refreshAll()
             deleted
         } catch (e: Exception) {
-            Log.e(TAG, "deleteDocumentFull failed", e); false
+            ErrorLogger.logException(context, TAG, "deleteDocumentFull failed", e); false
         }
     }
 
@@ -327,7 +331,7 @@ class VaultRepository(private val context: Context) {
             handle?.storeThumbnail(context.filesDir.absolutePath, id, data)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "storeThumbnail failed", e); false
+            ErrorLogger.logException(context, TAG, "storeThumbnail failed", e); false
         }
     }
 
@@ -335,7 +339,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.loadThumbnail(context.filesDir.absolutePath, id)
         } catch (e: Exception) {
-            Log.e(TAG, "loadThumbnail failed", e); null
+            ErrorLogger.logException(context, TAG, "loadThumbnail failed", e); null
         }
     }
 
@@ -365,7 +369,7 @@ class VaultRepository(private val context: Context) {
         try {
             exportVault(files, dbFile, vaultPassword, keys, kdfParams)
         } catch (e: Exception) {
-            Log.e(TAG, "exportVault failed", e); null
+            ErrorLogger.logException(context, TAG, "exportVault failed", e); null
         }
     }
 
@@ -373,7 +377,7 @@ class VaultRepository(private val context: Context) {
         try {
             importVault(vaultData, vaultPassword)
         } catch (e: Exception) {
-            Log.e(TAG, "importVault failed", e); null
+            ErrorLogger.logException(context, TAG, "importVault failed", e); null
         }
     }
 
@@ -388,7 +392,7 @@ class VaultRepository(private val context: Context) {
             restoreToLayout(contents, dbData, encryptionDir, databaseDir, filesDir)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "restoreToLayout failed", e); false
+            ErrorLogger.logException(context, TAG, "restoreToLayout failed", e); false
         }
     }
 
@@ -403,7 +407,7 @@ class VaultRepository(private val context: Context) {
         try {
             handle?.mergeBranchA(backupDbPath, backupMasterKey, files, backupKey, localKey, filesDir)
         } catch (e: Exception) {
-            Log.e(TAG, "mergeBranchA failed", e); null
+            ErrorLogger.logException(context, TAG, "mergeBranchA failed", e); null
         }
     }
 
@@ -457,6 +461,7 @@ fun DocumentFfi.toUiModel() = Document(
     readingPosition = readingPosition,
     barcodeFormat = barcodeFormat,
     barcodeValue = barcodeValue,
+    contentHash = contentHash,
 )
 
 fun Document.toFfi() = DocumentFfi(
@@ -482,6 +487,7 @@ fun Document.toFfi() = DocumentFfi(
     readingPosition = readingPosition,
     barcodeFormat = barcodeFormat,
     barcodeValue = barcodeValue,
+    contentHash = contentHash,
 )
 
 fun CollectionFfi.toUiModel() = Collection(

@@ -4,14 +4,14 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
-import android.util.Log
+import com.librecrate.app.util.ErrorLogger
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-class AndroidKeyStoreCryptographer(@Suppress("UNUSED_PARAMETER") context: Context) : KeyStoreCryptographer {
+class AndroidKeyStoreCryptographer(private val context: Context) : KeyStoreCryptographer {
 
     override fun encrypt(plaintext: ByteArray): Pair<ByteArray, ByteArray> {
         val key = obtainKey()
@@ -21,7 +21,7 @@ class AndroidKeyStoreCryptographer(@Suppress("UNUSED_PARAMETER") context: Contex
             cipher.init(Cipher.ENCRYPT_MODE, key)
             return Pair(cipher.iv, cipher.doFinal(plaintext))
         } catch (e: UserNotAuthenticatedException) {
-            Log.w(TAG, "Key requires auth — deleting and recreating")
+            ErrorLogger.logWarning(context, TAG, "Key requires auth — deleting and recreating", e)
             deleteKey()
             val newKey = obtainKey() ?: throw SecurityException("Cannot recreate key")
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -40,7 +40,7 @@ class AndroidKeyStoreCryptographer(@Suppress("UNUSED_PARAMETER") context: Contex
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
             return cipher.doFinal(ciphertext)
         } catch (e: UserNotAuthenticatedException) {
-            Log.w(TAG, "Key requires auth — deleting and recreating")
+            ErrorLogger.logWarning(context, TAG, "Key requires auth — deleting and recreating", e)
             deleteKey()
             val newKey = obtainKey() ?: throw SecurityException("Cannot recreate key")
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -59,7 +59,7 @@ class AndroidKeyStoreCryptographer(@Suppress("UNUSED_PARAMETER") context: Contex
                 keyStore.deleteEntry(KEYSTORE_DEVICE_KEY_ALIAS)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to delete KeyStore key", e)
+            ErrorLogger.logWarning(context, TAG, "Failed to delete KeyStore key", e)
         }
     }
 
@@ -82,7 +82,7 @@ class AndroidKeyStoreCryptographer(@Suppress("UNUSED_PARAMETER") context: Contex
             }
             (keyStore.getEntry(KEYSTORE_DEVICE_KEY_ALIAS, null) as KeyStore.SecretKeyEntry).secretKey
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to access AndroidKeyStore", e); null
+            ErrorLogger.logWarning(context, TAG, "Failed to access AndroidKeyStore", e); null
         }
     }
 

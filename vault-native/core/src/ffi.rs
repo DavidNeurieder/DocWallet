@@ -68,6 +68,7 @@ pub struct DocumentFfi {
     pub reading_position: Option<String>,
     pub barcode_format: Option<String>,
     pub barcode_value: Option<String>,
+    pub content_hash: Option<String>,
 }
 
 impl From<crate::db::queries::DocumentRow> for DocumentFfi {
@@ -95,6 +96,7 @@ impl From<crate::db::queries::DocumentRow> for DocumentFfi {
             reading_position: d.reading_position,
             barcode_format: d.barcode_format,
             barcode_value: d.barcode_value,
+            content_hash: d.content_hash,
         }
     }
 }
@@ -124,6 +126,7 @@ impl From<DocumentFfi> for crate::db::queries::DocumentRow {
             reading_position: d.reading_position,
             barcode_format: d.barcode_format,
             barcode_value: d.barcode_value,
+            content_hash: d.content_hash,
         }
     }
 }
@@ -312,6 +315,13 @@ impl DbHandle {
     pub fn get_document(&self, id: String) -> FfiResult<Option<DocumentFfi>> {
         let conn = self.inner.lock().map_err(|e| FfiError::Database(e.to_string()))?;
         let doc = crate::db::queries::get_document(&conn, &id)
+            .map_err(|e| FfiError::Database(e.to_string()))?;
+        Ok(doc.map(DocumentFfi::from))
+    }
+
+    pub fn find_document_by_hash(&self, hash: String) -> FfiResult<Option<DocumentFfi>> {
+        let conn = self.inner.lock().map_err(|e| FfiError::Database(e.to_string()))?;
+        let doc = crate::db::queries::find_document_by_hash(&conn, &hash)
             .map_err(|e| FfiError::Database(e.to_string()))?;
         Ok(doc.map(DocumentFfi::from))
     }

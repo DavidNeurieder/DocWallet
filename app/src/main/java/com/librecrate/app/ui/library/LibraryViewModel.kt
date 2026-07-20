@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.librecrate.app.LibreCrateApplication
 import com.librecrate.app.data.model.Document
+import com.librecrate.app.util.ErrorLogger
 import com.librecrate.app.data.model.DocumentType
 import com.librecrate.app.data.model.SearchResultItem
 import com.librecrate.app.data.model.SearchResultMatch
@@ -32,6 +33,7 @@ enum class SortOption(val label: String) {
 }
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
+    companion object { private const val TAG = "LibraryViewModel" }
     private val app = application as LibreCrateApplication
     private val vault = app.vaultRepository
 
@@ -129,7 +131,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                     val mimeType = withContext(Dispatchers.IO) { app.contentResolver.getType(uri) ?: "application/octet-stream" }
                     val doc = app.documentImporter.importDocument(uri, mimeType)
                     if (doc != null) successCount++ else failCount++
-                } catch (_: Exception) { failCount++ }
+                } catch (e: Exception) { ErrorLogger.logWarning(app, TAG, "importDocuments failed", e); failCount++ }
             }
             _snackbarMessage.value = when {
                 failCount == 0 -> "Imported $successCount document${if (successCount != 1) "s" else ""}"
