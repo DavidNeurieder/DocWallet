@@ -901,6 +901,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_vault_native_fn_method_dbhandle_search_documents_with_snippet(`ptr`: Pointer,`query`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_vault_native_fn_method_dbhandle_search_documents_with_all_matches(`ptr`: Pointer,`query`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_vault_native_fn_method_dbhandle_search_in_document(`ptr`: Pointer,`documentId`: RustBuffer.ByValue,`query`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_vault_native_fn_method_dbhandle_set_current_page(`ptr`: Pointer,`id`: RustBuffer.ByValue,`page`: Int,uniffi_out_err: UniffiRustCallStatus, 
@@ -1799,6 +1801,8 @@ public interface DbHandleInterface {
     
     fun `searchDocumentsWithSnippet`(`query`: kotlin.String): List<SnippetResultFfi>
     
+    fun `searchDocumentsWithAllMatches`(`query`: kotlin.String): List<MultiMatchResultFfi>
+    
     fun `searchInDocument`(`documentId`: kotlin.String, `query`: kotlin.String): List<SnippetResultFfi>
     
     fun `setCurrentPage`(`id`: kotlin.String, `page`: kotlin.Int): kotlin.Boolean
@@ -2234,7 +2238,16 @@ open class DbHandle: Disposable, AutoCloseable, DbHandleInterface {
     )
     }
     
-
+    @Throws(FfiException::class)override fun `searchDocumentsWithAllMatches`(`query`: kotlin.String): List<MultiMatchResultFfi> {
+            return FfiConverterSequenceTypeMultiMatchResultFfi.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vault_native_fn_method_dbhandle_search_documents_with_all_matches(
+        it, FfiConverterString.lower(`query`),_status)
+}
+    }
+    )
+    }
     
     @Throws(FfiException::class)override fun `searchInDocument`(`documentId`: kotlin.String, `query`: kotlin.String): List<SnippetResultFfi> {
             return FfiConverterSequenceTypeSnippetResultFfi.lift(
@@ -2859,6 +2872,82 @@ public object FfiConverterTypeSnippetResultFfi: FfiConverterRustBuffer<SnippetRe
 
 
 
+data class MatchFfi (
+    var `snippet`: kotlin.String, 
+    var `pageNumber`: kotlin.Int
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMatchFfi: FfiConverterRustBuffer<MatchFfi> {
+    override fun read(buf: ByteBuffer): MatchFfi {
+        return MatchFfi(
+            FfiConverterString.read(buf),
+            FfiConverterInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: MatchFfi) = (
+            FfiConverterString.allocationSize(value.`snippet`) +
+            FfiConverterInt.allocationSize(value.`pageNumber`)
+    )
+
+    override fun write(value: MatchFfi, buf: ByteBuffer) {
+            FfiConverterString.write(value.`snippet`, buf)
+            FfiConverterInt.write(value.`pageNumber`, buf)
+    }
+}
+
+
+
+data class MultiMatchResultFfi (
+    var `rank`: kotlin.Double, 
+    var `id`: kotlin.String, 
+    var `title`: kotlin.String, 
+    var `firstSnippet`: kotlin.String, 
+    var `additionalMatches`: kotlin.collections.List<MatchFfi>
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeMultiMatchResultFfi: FfiConverterRustBuffer<MultiMatchResultFfi> {
+    override fun read(buf: ByteBuffer): MultiMatchResultFfi {
+        return MultiMatchResultFfi(
+            FfiConverterDouble.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceTypeMatchFfi.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: MultiMatchResultFfi) = (
+            FfiConverterDouble.allocationSize(value.`rank`) +
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterString.allocationSize(value.`firstSnippet`) +
+            FfiConverterSequenceTypeMatchFfi.allocationSize(value.`additionalMatches`)
+    )
+
+    override fun write(value: MultiMatchResultFfi, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`rank`, buf)
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterString.write(value.`firstSnippet`, buf)
+            FfiConverterSequenceTypeMatchFfi.write(value.`additionalMatches`, buf)
+    }
+}
+
+
+
 data class TagFfi (
     var `id`: kotlin.String, 
     var `name`: kotlin.String, 
@@ -3361,6 +3450,53 @@ public object FfiConverterSequenceTypeSnippetResultFfi: FfiConverterRustBuffer<L
     }
 }
 
+
+
+public object FfiConverterSequenceTypeMatchFfi: FfiConverterRustBuffer<List<MatchFfi>> {
+    override fun read(buf: ByteBuffer): List<MatchFfi> {
+        val len = buf.getInt()
+        return List<MatchFfi>(len) {
+            FfiConverterTypeMatchFfi.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<MatchFfi>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeMatchFfi.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<MatchFfi>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeMatchFfi.write(it, buf)
+        }
+    }
+}
+
+
+
+public object FfiConverterSequenceTypeMultiMatchResultFfi: FfiConverterRustBuffer<List<MultiMatchResultFfi>> {
+    override fun read(buf: ByteBuffer): List<MultiMatchResultFfi> {
+        val len = buf.getInt()
+        return List<MultiMatchResultFfi>(len) {
+            FfiConverterTypeMultiMatchResultFfi.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<MultiMatchResultFfi>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeMultiMatchResultFfi.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<MultiMatchResultFfi>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeMultiMatchResultFfi.write(it, buf)
+        }
+    }
+}
 
 
 

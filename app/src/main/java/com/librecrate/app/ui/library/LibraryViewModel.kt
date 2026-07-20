@@ -91,9 +91,15 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             flow {
                 val docs = vault.documents.first()
                 val docMap = docs.associateBy { it.id }
-                val ftsResults = vault.searchDocumentsWithSnippet(query)
+                val ftsResults = vault.searchDocumentsWithAllMatches(query)
                 emit(ftsResults.map { ffi ->
                     val doc = docMap[ffi.id]
+                    val matches = mutableListOf(
+                        SearchResultMatch(snippet = ffi.firstSnippet, pageNumber = 0),
+                    )
+                    matches.addAll(ffi.additionalMatches.map { m ->
+                        SearchResultMatch(snippet = m.snippet, pageNumber = m.pageNumber)
+                    })
                     SearchResultItem(
                         id = ffi.id,
                         title = ffi.title,
@@ -101,7 +107,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
                         pageCount = doc?.pageCount ?: 0,
                         author = doc?.author ?: "",
                         thumbnailPath = doc?.thumbnailPath,
-                        matches = listOf(SearchResultMatch(snippet = ffi.snippet, pageNumber = 0)),
+                        matches = matches,
                     )
                 })
             }

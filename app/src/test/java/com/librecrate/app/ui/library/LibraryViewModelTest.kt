@@ -24,7 +24,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import uniffi.vault_native.SnippetResultFfi
+import uniffi.vault_native.MatchFfi
+import uniffi.vault_native.MultiMatchResultFfi
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -73,8 +74,8 @@ class LibraryViewModelTest {
                 description = "The quick fox jumps",
             )
         )
-        coEvery { mockVault.searchDocumentsWithSnippet("fox") } returns listOf(
-            SnippetResultFfi(rank = 1.0, id = "1", title = "Doc One", snippet = "The quick <b>fox</b> jumps"),
+        coEvery { mockVault.searchDocumentsWithAllMatches("fox") } returns listOf(
+            MultiMatchResultFfi(rank = 1.0, id = "1", title = "Doc One", firstSnippet = "The quick <b>fox</b> jumps", additionalMatches = emptyList()),
         )
 
         viewModel.search("fox")
@@ -94,8 +95,8 @@ class LibraryViewModelTest {
                 description = "some text",
             )
         )
-        coEvery { mockVault.searchDocumentsWithSnippet("text") } returns listOf(
-            SnippetResultFfi(rank = 1.0, id = "1", title = "Doc", snippet = "some <b>text</b>"),
+        coEvery { mockVault.searchDocumentsWithAllMatches("text") } returns listOf(
+            MultiMatchResultFfi(rank = 1.0, id = "1", title = "Doc", firstSnippet = "some <b>text</b>", additionalMatches = emptyList()),
         )
 
         viewModel.search("text")
@@ -122,14 +123,45 @@ class LibraryViewModelTest {
                 description = "the quick rabbit",
             )
         )
-        coEvery { mockVault.searchDocumentsWithSnippet("rabbit") } returns listOf(
-            SnippetResultFfi(rank = 1.0, id = "2", title = "Rabbit Facts", snippet = "the quick <b>rabbit</b>"),
+        coEvery { mockVault.searchDocumentsWithAllMatches("rabbit") } returns listOf(
+            MultiMatchResultFfi(rank = 1.0, id = "2", title = "Rabbit Facts", firstSnippet = "the quick <b>rabbit</b>", additionalMatches = emptyList()),
         )
 
         viewModel.search("rabbit")
         advanceUntilIdle()
         assertEquals(1, viewModel.searchResults.value.size)
         assertEquals("2", viewModel.searchResults.value[0].id)
+    }
+
+    @Test
+    fun `search results include additional page matches`() = runTest(testDispatcher) {
+        keepSearchActive()
+        documentsFlow.value = listOf(
+            Document(
+                id = "1", title = "Multi Match Doc", fileName = "doc.pdf",
+                mimeType = "application/pdf", pageCount = 3, author = "Author",
+                description = "a document",
+            )
+        )
+        coEvery { mockVault.searchDocumentsWithAllMatches("fox") } returns listOf(
+            MultiMatchResultFfi(
+                rank = 1.0, id = "1", title = "Multi Match Doc",
+                firstSnippet = "The quick <b>fox</b> jumps",
+                additionalMatches = listOf(
+                    MatchFfi(snippet = "Another <b>fox</b> sighting on page 2", pageNumber = 2),
+                    MatchFfi(snippet = "Third <b>fox</b> reference on page 3", pageNumber = 3),
+                ),
+            ),
+        )
+
+        viewModel.search("fox")
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.searchResults.value.size)
+        assertEquals(3, viewModel.searchResults.value[0].matches.size)
+        assertTrue(viewModel.searchResults.value[0].matches[0].snippet.contains("fox"))
+        assertEquals(2, viewModel.searchResults.value[0].matches[1].pageNumber)
+        assertEquals(3, viewModel.searchResults.value[0].matches[2].pageNumber)
     }
 
     @Test

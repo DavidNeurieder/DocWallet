@@ -206,6 +206,42 @@ impl From<crate::db::fts::FtsSnippetResult> for SnippetResultFfi {
 }
 
 #[derive(uniffi::Record)]
+pub struct MatchFfi {
+    pub snippet: String,
+    pub page_number: i32,
+}
+
+impl From<crate::db::fts::PageMatch> for MatchFfi {
+    fn from(m: crate::db::fts::PageMatch) -> Self {
+        Self {
+            snippet: m.snippet,
+            page_number: m.page_number,
+        }
+    }
+}
+
+#[derive(uniffi::Record)]
+pub struct MultiMatchResultFfi {
+    pub rank: f64,
+    pub id: String,
+    pub title: String,
+    pub first_snippet: String,
+    pub additional_matches: Vec<MatchFfi>,
+}
+
+impl From<(crate::db::fts::FtsAllMatchesResult, Vec<crate::db::fts::PageMatch>)> for MultiMatchResultFfi {
+    fn from((r, page_matches): (crate::db::fts::FtsAllMatchesResult, Vec<crate::db::fts::PageMatch>)) -> Self {
+        Self {
+            rank: r.rank,
+            id: r.id,
+            title: r.title,
+            first_snippet: r.snippet,
+            additional_matches: page_matches.into_iter().map(MatchFfi::from).collect(),
+        }
+    }
+}
+
+#[derive(uniffi::Record)]
 pub struct MergeStatsFfi {
     pub documents_added: u32,
     pub documents_updated: u32,
@@ -384,6 +420,16 @@ impl DbHandle {
         let results = crate::db::fts::search_with_snippet(&conn, &query)
             .map_err(|e| FfiError::Database(e.to_string()))?;
         Ok(results.into_iter().map(SnippetResultFfi::from).collect())
+    }
+
+    pub fn search_documents_with_all_matches(&self, query: String) -> FfiResult<Vec<MultiMatchResultFfi>> {
+        let conn = self.inner.lock().map_err(|e| FfiError::Database(e.to_string()))?;
+        let results = crate::db::fts::search_with_all_matches(&conn, &query)
+            .map_err(|e| FfiError::Database(e.to_string()))?;
+        Ok(results.into_iter().map(|r| {
+            let page_matches = crate::db::fts::extract_page_matches(&r.highlighted);
+            (r, page_matches).into()
+        }).collect())
     }
 
     pub fn search_in_document(&self, document_id: String, query: String) -> FfiResult<Vec<SnippetResultFfi>> {

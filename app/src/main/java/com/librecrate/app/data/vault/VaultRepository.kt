@@ -274,6 +274,10 @@ class VaultRepository(private val context: Context) {
         handle?.searchDocumentsWithSnippet(query) ?: emptyList()
     }
 
+    suspend fun searchDocumentsWithAllMatches(query: String): List<MultiMatchResultFfi> = withContext(Dispatchers.IO) {
+        handle?.searchDocumentsWithAllMatches(query) ?: emptyList()
+    }
+
     suspend fun searchInDocument(documentId: String, query: String): List<SnippetResultFfi> = withContext(Dispatchers.IO) {
         handle?.searchInDocument(documentId, query) ?: emptyList()
     }
