@@ -1,14 +1,21 @@
 package com.librecrate.app.data.import
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
+import com.librecrate.app.data.import.ComicProcessor
+import com.librecrate.app.data.import.ImageProcessor
+import com.librecrate.app.data.import.PkPassProcessor
 import com.librecrate.app.data.model.Document
 import com.librecrate.app.data.model.DocumentType
 import com.librecrate.app.data.vault.VaultRepository
+import com.librecrate.app.reader.epub.EpubDocumentProcessor
+import com.librecrate.app.reader.pdf.PdfDocumentProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -39,6 +46,11 @@ class DocumentImporter(
                 description = "", textContent = null,
             )
             if (resultId == null) { Log.e(TAG, "importDocument returned null"); return@withContext null }
+
+            generateThumbnail(tempFile, mimeType)?.let { thumbData ->
+                vaultRepository.storeThumbnail(docId, thumbData)
+            }
+
             vaultRepository.getDocument(docId)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to import document", e); null
@@ -77,5 +89,33 @@ class DocumentImporter(
             }
         }
         return name
+    }
+
+    private suspend fun generateThumbnail(file: File, mimeType: String): ByteArray? {
+        return try {
+            val bytes: ByteArray? = when {
+                mimeType == "application/pdf" ->
+                    PdfDocumentProcessor().process(file, mimeType).thumbnailData
+                mimeType == "application/epub+zip" ->
+                    EpubDocumentProcessor().process(file, mimeType).thumbnailData
+                mimeType.startsWith("image/") ->
+                    ImageProcessor().process(file, mimeType).thumbnailBitmap?.toPngBytes()
+                mimeType == "application/vnd.comicbook+zip" || mimeType == "application/x-cbr" ->
+                    ComicProcessor().process(file, mimeType).thumbnailBitmap?.toPngBytes()
+                mimeType == "application/vnd.apple.pkpass" ->
+                    PkPassProcessor().process(file, mimeType).thumbnailBitmap?.toPngBytes()
+                else -> null
+            }
+            bytes
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to generate thumbnail", e)
+            null
+        }
+    }
+
+    private fun Bitmap.toPngBytes(): ByteArray {
+        val out = ByteArrayOutputStream()
+        compress(Bitmap.CompressFormat.PNG, 90, out)
+        return out.toByteArray()
     }
 }

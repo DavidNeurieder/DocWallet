@@ -419,7 +419,7 @@ fun LibraryScreen(
         snapshotFlow { documents }
             .collect { list ->
                 list.forEach { document ->
-                    document.thumbnailPath?.let { viewModel.loadThumbnail(document.id, it) }
+                    viewModel.loadThumbnail(document.id)
                 }
             }
     }

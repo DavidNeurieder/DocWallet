@@ -23,8 +23,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
-import java.io.File
-
 enum class SortOption(val label: String) {
     NAME_ASC("Name A-Z"),
     NAME_DESC("Name Z-A"),
@@ -147,8 +145,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     val thumbnails: StateFlow<Map<String, ImageBitmap>> = _thumbnails.asStateFlow()
     private val thumbnailSemaphore = Semaphore(4)
 
-    fun loadThumbnail(documentId: String, thumbnailPath: String?) {
-        if (thumbnailPath == null) return
+    fun loadThumbnail(documentId: String) {
         viewModelScope.launch {
             val cached = ThumbnailCache.get(documentId)
             if (cached != null) {
@@ -159,8 +156,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val bitmap = withContext(Dispatchers.IO) {
                     val thumbData = vault.loadThumbnail(documentId)
-                    if (thumbData != null) BitmapFactory.decodeByteArray(thumbData, 0, thumbData.size)
-                    else { val f = File(thumbnailPath); if (f.exists()) BitmapFactory.decodeFile(thumbnailPath) else null }
+                    if (thumbData != null) BitmapFactory.decodeByteArray(thumbData, 0, thumbData.size) else null
                 }
                 if (bitmap != null) {
                     ThumbnailCache.put(documentId, bitmap)
