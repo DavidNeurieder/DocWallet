@@ -5,7 +5,6 @@ import android.app.Application
 import android.os.Bundle
 import android.util.Log
 import com.librecrate.app.data.AppPreferencesStore
-import com.librecrate.app.data.PinLockManager
 import com.librecrate.app.data.encryption.EncryptionManager
 import com.librecrate.app.data.import.DocumentImporter
 import com.librecrate.app.data.vault.VaultRepository
@@ -40,9 +39,6 @@ class LibreCrateApplication : Application() {
         vaultRepository = VaultRepository(this)
         registerActivityLifecycleCallbacks(ActivityLifecycleLockCallbacks(encryptionManager, this))
         ErrorLogger.installGlobalHandler(this)
-        if (AppPreferencesStore.isPinEnabled(this)) {
-            PinLockManager.lock()
-        }
     }
 
     companion object {
@@ -64,11 +60,7 @@ private class ActivityLifecycleLockCallbacks(
 
     override fun onActivityStopped(activity: Activity) {
         if (activityCount.decrementAndGet() <= 0) {
-            if (AppPreferencesStore.isPinEnabled(app)) {
-                PinLockManager.lock()
-            } else {
-                encryptionManager.lock()
-            }
+            encryptionManager.lock()
         }
     }
 

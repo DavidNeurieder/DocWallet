@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.librecrate.app.LibreCrateApplication
-import com.librecrate.app.data.AppPreferencesStore
 import com.librecrate.app.domain.BackupProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,10 +35,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _backupProgress = MutableStateFlow<BackupProgress?>(null)
     val backupProgress: StateFlow<BackupProgress?> = _backupProgress.asStateFlow()
-
-    val isPinEnabled: Boolean get() = AppPreferencesStore.isPinEnabled(getApplication())
-
-    fun setPinEnabled(enabled: Boolean) { AppPreferencesStore.setPinEnabled(getApplication(), enabled) }
 
     fun setPassword() {
         val pwd = newPassword.value; val confirm = confirmPassword.value
