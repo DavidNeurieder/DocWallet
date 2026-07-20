@@ -10,6 +10,7 @@ import com.librecrate.app.data.encryption.EncryptionManager
 import com.librecrate.app.data.import.DocumentImporter
 import com.librecrate.app.data.vault.VaultRepository
 import com.librecrate.app.domain.BackupManager
+import com.librecrate.app.util.ErrorLogger
 import java.util.concurrent.atomic.AtomicInteger
 
 class LibreCrateApplication : Application() {
@@ -37,6 +38,7 @@ class LibreCrateApplication : Application() {
         encryptionManager = EncryptionManager(this)
         vaultRepository = VaultRepository(this)
         registerActivityLifecycleCallbacks(ActivityLifecycleLockCallbacks(encryptionManager, this))
+        ErrorLogger.installGlobalHandler(this)
         if (AppPreferencesStore.isPinEnabled(this)) {
             PinLockManager.lock()
         }

@@ -274,7 +274,8 @@ private fun EpubReaderHost(
                 navigatorFactory.createFragmentFactory(initialLocator = initialLocator, initialPreferences = initialPreferences)
             isReady = true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open EPUB", e); error = e.message
+            com.librecrate.app.util.ErrorLogger.log(context, TAG, "Failed to open EPUB", e)
+            error = e.message
         }
     }
 
