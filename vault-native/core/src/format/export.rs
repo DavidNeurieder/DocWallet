@@ -154,13 +154,13 @@ mod tests {
         let imported = import::import(&exported.data, password, &kdf_params).unwrap();
         assert_eq!(imported.db_file, Some(db_data));
         assert_eq!(imported.files.len(), 1);
-        assert_eq!(imported.files[0].1, file_data);
+        assert_eq!(imported.files[0].value, file_data);
 
         let imported_wmk = imported
             .keys
             .iter()
-            .find(|(k, _)| k == "wrapped_master_key")
-            .map(|(_, v)| v.clone())
+            .find(|kv| kv.key == "wrapped_master_key")
+            .map(|kv| kv.value.clone())
             .unwrap();
 
         let unwrapped =

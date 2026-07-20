@@ -4,14 +4,14 @@ use rand::rngs::OsRng;
 pub const DEFAULT_MEMORY_COST: u32 = 19456;
 pub const DEFAULT_ITERATIONS: u32 = 2;
 pub const DEFAULT_PARALLELISM: u32 = 2;
-pub const DEFAULT_HASH_LENGTH: usize = 32;
+pub const DEFAULT_HASH_LENGTH: i32 = 32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct Argon2Params {
     pub memory_cost: u32,
     pub iterations: u32,
     pub parallelism: u32,
-    pub hash_length: usize,
+    pub hash_length: i32,
 }
 
 impl Default for Argon2Params {
@@ -26,7 +26,7 @@ impl Default for Argon2Params {
 }
 
 impl Argon2Params {
-    pub fn new(memory_cost: u32, iterations: u32, parallelism: u32, hash_length: usize) -> Self {
+    pub fn new(memory_cost: u32, iterations: u32, parallelism: u32, hash_length: i32) -> Self {
         Self {
             memory_cost,
             iterations,
@@ -48,11 +48,11 @@ pub fn derive_key(password: &str, salt: &[u8], params: &Argon2Params) -> Option<
         params.memory_cost,
         params.iterations,
         params.parallelism,
-        Some(params.hash_length),
+        Some(params.hash_length as usize),
     )
     .ok()?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, p);
-    let mut key = vec![0u8; params.hash_length];
+    let mut key = vec![0u8; params.hash_length as usize];
     argon2
         .hash_password_into(password.as_bytes(), salt, &mut key)
         .ok()?;

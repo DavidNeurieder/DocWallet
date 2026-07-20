@@ -86,12 +86,7 @@ fn test_fts_search_e2e() {
         ).unwrap();
     }
 
-    // Populate FTS index
-    conn.execute(
-        "INSERT INTO documents_fts(rowid, title, author, description, text_content)
-         SELECT rowid, title, author, description, text_content FROM documents",
-        [],
-    ).unwrap();
+    // FTS index is populated automatically by the fts_after_insert trigger
 
     // Search for "fox"
     let results = fts::search(&conn, "fox").unwrap();
@@ -171,18 +166,18 @@ fn test_vault_roundtrip_with_db() {
     let imported_wmk = imported
         .keys
         .iter()
-        .find(|(k, _)| k == "wrapped_master_key")
-        .map(|(_, v)| v.clone())
+        .find(|kv| kv.key == "wrapped_master_key")
+        .map(|kv| kv.value.clone())
         .unwrap();
     assert_eq!(imported_wmk, wrapped_mk);
 
     // Verify files and decrypt
     assert_eq!(imported.files.len(), 1);
-    let (fname, fdata) = &imported.files[0];
-    assert_eq!(fname, "hello.txt");
+    let fkv = &imported.files[0];
+    assert_eq!(fkv.key, "hello.txt");
 
-    let iv = &fdata[..aes_gcm::IV_LENGTH];
-    let ct = &fdata[aes_gcm::IV_LENGTH..];
+    let iv = &fkv.value[..aes_gcm::IV_LENGTH];
+    let ct = &fkv.value[aes_gcm::IV_LENGTH..];
     let decrypted = aes_gcm::decrypt_bytes(ct, &master_key, iv).unwrap();
     assert_eq!(decrypted, b"Hello, world!");
 

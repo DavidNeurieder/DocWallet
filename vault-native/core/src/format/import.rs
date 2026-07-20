@@ -6,10 +6,13 @@ use crate::format::package;
 use std::io::Read;
 use zip::ZipArchive;
 
+use crate::types::KeyValue;
+
+#[derive(Debug, uniffi::Record)]
 pub struct ImportedContents {
-    pub keys: Vec<(String, Vec<u8>)>,
+    pub keys: Vec<KeyValue>,
     pub db_file: Option<Vec<u8>>,
-    pub files: Vec<(String, Vec<u8>)>,
+    pub files: Vec<KeyValue>,
 }
 
 pub fn import(vault_data: &[u8], vault_password: &str, _kdf_params: &Argon2Params) -> Result<ImportedContents> {
@@ -63,11 +66,11 @@ fn extract_zip(data: &[u8]) -> Result<ImportedContents> {
             .map_err(|e| Error::Compression(e.to_string()))?;
 
         if let Some(stripped) = name.strip_prefix("keys/") {
-            keys.push((stripped.to_string(), content));
+            keys.push(KeyValue { key: stripped.to_string(), value: content });
         } else if name == "db/librecrate.db" {
             db_file = Some(content);
         } else if let Some(stripped) = name.strip_prefix("files/") {
-            files.push((stripped.to_string(), content));
+            files.push(KeyValue { key: stripped.to_string(), value: content });
         }
     }
 

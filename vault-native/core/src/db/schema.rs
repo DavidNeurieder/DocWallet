@@ -68,6 +68,19 @@ pub fn create_all_tables(conn: &Connection) -> rusqlite::Result<()> {
             ON document_tags(document_id);
         CREATE INDEX IF NOT EXISTS idx_document_tags_tag_id
             ON document_tags(tag_id);
+
+        CREATE TRIGGER IF NOT EXISTS fts_after_insert AFTER INSERT ON documents BEGIN
+            INSERT INTO documents_fts(rowid, title, author, description, text_content)
+            VALUES (new.rowid, new.title, new.author, new.description, new.text_content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS fts_after_delete AFTER DELETE ON documents BEGIN
+            DELETE FROM documents_fts WHERE rowid = old.rowid;
+        END;
+        CREATE TRIGGER IF NOT EXISTS fts_after_update AFTER UPDATE OF title, author, description, text_content ON documents BEGIN
+            DELETE FROM documents_fts WHERE rowid = old.rowid;
+            INSERT INTO documents_fts(rowid, title, author, description, text_content)
+            VALUES (new.rowid, new.title, new.author, new.description, new.text_content);
+        END;
         ",
     )?;
 

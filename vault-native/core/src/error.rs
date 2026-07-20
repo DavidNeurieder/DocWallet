@@ -1,6 +1,4 @@
-use thiserror::Error;
-
-#[derive(Error, Debug)]
+#[derive(Debug, uniffi::Error, thiserror::Error)]
 pub enum Error {
     #[error("Crypto error: {0}")]
     Crypto(String),
@@ -12,10 +10,10 @@ pub enum Error {
     Kdf(String),
 
     #[error("Database error: {0}")]
-    Database(#[from] rusqlite::Error),
+    Database(String),
 
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
 
     #[error("Invalid data: {0}")]
     InvalidData(String),
@@ -28,6 +26,18 @@ pub enum Error {
 
     #[error("Compression error: {0}")]
     Compression(String),
+}
+
+impl From<rusqlite::Error> for Error {
+    fn from(e: rusqlite::Error) -> Self {
+        Error::Database(e.to_string())
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Io(e.to_string())
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

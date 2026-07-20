@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, Result};
 
 /// A lightweight document row returned by query functions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct DocumentRow {
     pub id: String,
     pub title: String,
@@ -58,7 +58,7 @@ impl Default for DocumentRow {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct CollectionRow {
     pub id: String,
     pub name: String,
@@ -67,7 +67,7 @@ pub struct CollectionRow {
     pub parent_id: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct TagRow {
     pub id: String,
     pub name: String,
@@ -283,17 +283,29 @@ pub fn set_current_page(conn: &Connection, id: &str, page: i32) -> Result<bool> 
     Ok(affected > 0)
 }
 
-/// Add a document and index it into FTS5 in one call.
+/// Add a document with text_content for full-text search.
+/// The FTS index is populated automatically by the fts_after_insert trigger.
 pub fn add_document_full(
     conn: &Connection,
     doc: &DocumentRow,
     text_content: Option<&str>,
 ) -> Result<()> {
-    add_document(conn, doc)?;
     conn.execute(
-        "INSERT INTO documents_fts(rowid, title, author, description, text_content)
-         VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4)",
-        params![doc.title, doc.author, doc.description, text_content.unwrap_or("")],
+        "INSERT INTO documents (id, title, file_name, mime_type, file_path, file_size, page_count,
+         author, description, thumbnail_path, imported_at, last_opened_at, modified_at,
+         is_favorite, is_conflict, conflict_with, collection_id, encryption_iv, current_page,
+         reading_position, barcode_format, barcode_value, content_hash, text_content)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
+         ?20, ?21, ?22, ?23, ?24)",
+        params![
+            doc.id, doc.title, doc.file_name, doc.mime_type, doc.file_path,
+            doc.file_size, doc.page_count, doc.author, doc.description, doc.thumbnail_path,
+            doc.imported_at, doc.last_opened_at, doc.modified_at,
+            doc.is_favorite as i32, doc.is_conflict as i32, doc.conflict_with, doc.collection_id,
+            doc.encryption_iv, doc.current_page,
+            doc.reading_position, doc.barcode_format, doc.barcode_value, doc.content_hash,
+            text_content.unwrap_or(""),
+        ],
     )?;
     Ok(())
 }

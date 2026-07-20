@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::Path;
 
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct MergeStats {
     pub documents_added: u32,
     pub documents_updated: u32,
@@ -26,8 +27,8 @@ pub fn branch_b_fresh_install(
 ) -> Result<()> {
     // Write key files from the vault
     std::fs::create_dir_all(encryption_dir)?;
-    for (name, data) in &contents.keys {
-        std::fs::write(encryption_dir.join(name), data)?;
+    for kv in &contents.keys {
+        std::fs::write(encryption_dir.join(&kv.key), &kv.value)?;
     }
 
     // Write the DB
@@ -40,12 +41,12 @@ pub fn branch_b_fresh_install(
 
     // Write files from the vault
     std::fs::create_dir_all(files_dir)?;
-    for (name, data) in &contents.files {
-        let target = files_dir.join(name);
+    for kv in &contents.files {
+        let target = files_dir.join(&kv.key);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(target, data)?;
+        std::fs::write(target, &kv.value)?;
     }
 
     Ok(())
@@ -64,16 +65,12 @@ pub fn branch_a_merge(
 ) -> Result<MergeStats> {
     // Open backup DB
     let backup_conn =
-        crate::db::schema::open_encrypted(backup_path, backup_master_key)
-            .map_err(|e| Error::Database(e))?;
+        crate::db::schema::open_encrypted(backup_path, backup_master_key)?;
 
     // Read documents from backup
-    let backup_docs = crate::db::queries::list_documents(&backup_conn)
-        .map_err(|e| Error::Database(e))?;
-    let backup_collections = crate::db::queries::list_collections(&backup_conn)
-        .map_err(|e| Error::Database(e))?;
-    let backup_tags = crate::db::queries::list_tags(&backup_conn)
-        .map_err(|e| Error::Database(e))?;
+    let backup_docs = crate::db::queries::list_documents(&backup_conn)?;
+    let backup_collections = crate::db::queries::list_collections(&backup_conn)?;
+    let backup_tags = crate::db::queries::list_tags(&backup_conn)?;
 
     let mut stats = MergeStats {
         documents_added: 0,
@@ -86,8 +83,7 @@ pub fn branch_a_merge(
 
     // Use a transaction for the merge
     current_conn
-        .execute_batch("BEGIN TRANSACTION")
-        .map_err(|e| Error::Database(e))?;
+        .execute_batch("BEGIN TRANSACTION")?;
 
     let merge_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         // Merge collections
@@ -204,12 +200,10 @@ pub fn branch_a_merge(
 
     if merge_result.is_ok() {
         current_conn
-            .execute_batch("COMMIT")
-            .map_err(|e| Error::Database(e))?;
+            .execute_batch("COMMIT")?;
     } else {
         current_conn
-            .execute_batch("ROLLBACK")
-            .map_err(|e| Error::Database(e))?;
+            .execute_batch("ROLLBACK")?;
         return Err(Error::Format("merge failed".into()));
     }
 
@@ -317,11 +311,11 @@ mod tests {
 
         let contents = ImportedContents {
             keys: vec![
-                ("wrapped_master_key".into(), aes_kw::wrap(&master_key, &master_key).unwrap()),
-                ("salt".into(), b"test-salt-12345678".to_vec()),
+                crate::types::KeyValue { key: "wrapped_master_key".into(), value: aes_kw::wrap(&master_key, &master_key).unwrap() },
+                crate::types::KeyValue { key: "salt".into(), value: b"test-salt-12345678".to_vec() },
             ],
             db_file: Some(db_data),
-            files: vec![("test.txt".into(), encrypted_file)],
+            files: vec![crate::types::KeyValue { key: "test.txt".into(), value: encrypted_file }],
         };
 
         branch_b_fresh_install(

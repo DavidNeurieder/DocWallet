@@ -5,14 +5,14 @@ pub fn rebuild_index(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, uniffi::Record)]
 pub struct FtsResult {
     pub rank: f64,
     pub id: String,
     pub title: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, uniffi::Record)]
 pub struct FtsSnippetResult {
     pub rank: f64,
     pub id: String,
@@ -20,7 +20,7 @@ pub struct FtsSnippetResult {
     pub snippet: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, uniffi::Record)]
 pub struct FtsAllMatchesResult {
     pub rank: f64,
     pub id: String,
@@ -29,10 +29,19 @@ pub struct FtsAllMatchesResult {
     pub highlighted: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, uniffi::Record)]
 pub struct PageMatch {
     pub snippet: String,
     pub page_number: i32,
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct MultiMatchResult {
+    pub rank: f64,
+    pub id: String,
+    pub title: String,
+    pub first_snippet: String,
+    pub additional_matches: Vec<PageMatch>,
 }
 
 /// Search documents using FTS5. Returns document id/title ordered by relevance.
@@ -230,20 +239,12 @@ mod tests {
         ).unwrap();
     }
 
-    fn populate_fts(conn: &Connection) {
-        conn.execute(
-            "INSERT INTO documents_fts(rowid, title, author, description, text_content)
-             SELECT rowid, title, author, description, text_content FROM documents",
-            [],
-        ).unwrap();
-    }
-
     #[test]
     fn test_fts_search() {
         let conn = setup_db();
         insert_doc(&conn, "doc1", "The quick brown fox", "This is a document about the quick brown fox");
         insert_doc(&conn, "doc2", "Lazy dog", "The lazy dog sleeps all day");
-        populate_fts(&conn);
+        // FTS index is populated automatically by the fts_after_insert trigger
 
         let results = search(&conn, "fox").unwrap();
         assert_eq!(results.len(), 1);
@@ -289,7 +290,7 @@ mod tests {
             "Animal Facts",
             "[PAGE=1]The quick brown <b>fox</b> jumps.[PAGE=2]The lazy <b>fox</b> sleeps.",
         );
-        populate_fts(&conn);
+        // FTS index is populated automatically by the fts_after_insert trigger
 
         // FTS5 minimum term length is 3, so use three+ char terms
         let results = search_with_all_matches(&conn, "fox").unwrap();
@@ -301,3 +302,4 @@ mod tests {
         assert!(page_matches.len() >= 2, "expected at least 2 page matches, got {}", page_matches.len());
     }
 }
+

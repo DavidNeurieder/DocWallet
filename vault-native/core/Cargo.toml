@@ -31,3 +31,4 @@ uniffi = { version = "0.28", features = ["build"] }
 tempfile = "3"
 uniffi_bindgen = "0.28"
 camino = "1"
+rusqlite = "0.31"

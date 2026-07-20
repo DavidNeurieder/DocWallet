@@ -5,5 +5,6 @@ pub mod ffi;
 pub mod format;
 pub mod kdf;
 pub mod merge;
+pub mod types;
 
 uniffi::setup_scaffolding!();

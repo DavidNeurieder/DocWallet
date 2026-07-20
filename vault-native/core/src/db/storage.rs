@@ -179,13 +179,9 @@ pub fn export_document_file(conn: &Connection, base_dir: &Path, id: &str, key: O
     }
 }
 
-/// Delete a document: remove file blob, delete DB row, remove FTS entry.
+/// Delete a document: remove file blob, delete DB row.
+/// FTS index is cleaned up automatically by the fts_after_delete trigger.
 pub fn delete_document_full(conn: &Connection, base_dir: &Path, id: &str) -> rusqlite::Result<bool> {
-    // Remove from FTS first — for internal content tables, DELETE is supported directly by FTS5
-    conn.execute(
-        "DELETE FROM documents_fts WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)",
-        rusqlite::params![id],
-    )?;
     delete_file(base_dir, id);
     queries::delete_document(conn, id)
 }
