@@ -192,7 +192,7 @@ pub fn find_document_by_hash(conn: &Connection, hash: &str) -> Result<Option<Doc
 
 pub fn add_document(conn: &Connection, doc: &DocumentRow) -> Result<()> {
     conn.execute(
-        "INSERT INTO documents (id, title, file_name, mime_type, file_path, file_size, page_count,
+        "INSERT OR REPLACE INTO documents (id, title, file_name, mime_type, file_path, file_size, page_count,
          author, description, thumbnail_path, imported_at, last_opened_at, modified_at,
          is_favorite, is_conflict, conflict_with, collection_id, encryption_iv, current_page,
          reading_position, barcode_format, barcode_value, content_hash)
@@ -291,7 +291,7 @@ pub fn add_document_full(
     text_content: Option<&str>,
 ) -> Result<()> {
     conn.execute(
-        "INSERT INTO documents (id, title, file_name, mime_type, file_path, file_size, page_count,
+        "INSERT OR REPLACE INTO documents (id, title, file_name, mime_type, file_path, file_size, page_count,
          author, description, thumbnail_path, imported_at, last_opened_at, modified_at,
          is_favorite, is_conflict, conflict_with, collection_id, encryption_iv, current_page,
          reading_position, barcode_format, barcode_value, content_hash, text_content)

@@ -134,10 +134,6 @@ pub fn import_document(
         (file_data.to_vec(), dummy_iv)
     };
 
-    save_file(base_dir, id, &stored_data).map_err(|e| {
-        rusqlite::Error::ToSqlConversionFailure(Box::new(e))
-    })?;
-
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -162,6 +158,11 @@ pub fn import_document(
     };
 
     queries::add_document_full(conn, &doc, text_content)?;
+
+    save_file(base_dir, id, &stored_data).map_err(|e| {
+        rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+    })?;
+
     Ok(id.to_string())
 }
 
