@@ -16,6 +16,7 @@ vault-reader/build/
 reader-pdf/build/
 reader-epub/build/
 vault-cli/build/
+vault-native-android/build/
 
 # Test reports
 app/build/reports/

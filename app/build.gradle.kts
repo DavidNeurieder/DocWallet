@@ -27,7 +27,7 @@ android {
         }
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
 
         resourceConfigurations += setOf("en")
@@ -97,7 +97,7 @@ dependencies {
     implementation(libs.lifecycle.process)
     implementation(libs.navigation.compose)
     implementation(libs.documentfile)
-    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    implementation(project(":vault-native-android"))
     implementation(project(":vault-reader"))
     implementation(project(":reader-pdf"))
     implementation(project(":reader-epub"))
