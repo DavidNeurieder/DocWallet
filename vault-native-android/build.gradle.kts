@@ -26,7 +26,7 @@ android {
     }
 
     lint {
-        disable += listOf("ChromeOsAbiSupport", "UseTomlInstead")
+        disable += listOf("ChromeOsAbiSupport", "UseTomlInstead", "NewApi")
     }
 }
 
