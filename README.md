@@ -1,6 +1,8 @@
 # LibreCrate
 
-**Version 0.3.0**
+[![Get it on GitHub](https://img.shields.io/badge/Get_it_on_GitHub-181717?style=for-the-badge&logo=github)](https://github.com/DavidNeurieder/LibreCrate/releases/download/v0.3.0/LibreCrate_v0.3.0.apk)
+
+**Version 0.3.0** · 
 
 Encrypted document vault for Android — stores, views, organizes, and searches PDFs, EPUBs, PKPass files, comic archives (CBZ/CBR), images, and personal notes. All documents are encrypted at rest with optional password protection and zero network access.
 
@@ -26,6 +28,21 @@ Encrypted document vault for Android — stores, views, organizes, and searches 
 - **Images**: full-screen Coil viewer with zoom/pan and an info overlay
 - **Notes**: Markdown editor with live preview, formatting toolbar, word/character count, and debounced autosave
 
+## Built with
+
+| Library | Purpose |
+|---------|---------|
+| [Jetpack Compose](https://developer.android.com/jetpack/compose) | UI framework |
+| [Coil](https://coil-kt.github.io/coil/) | Image loading |
+| [MuPDF](https://mupdf.com/) | PDF rendering |
+| [Readium](https://readium.org/) | EPUB reader toolkit |
+| [ZXing](https://github.com/zxing/zxing) | Barcode display |
+| [CommonMark](https://github.com/commonmark/commonmark-java) | Markdown parsing |
+| [Apache Commons Compress](https://commons.apache.org/proper/commons-compress/) + [Junrar](https://github.com/junrar/junrar) | Comic archive (CBZ/CBR) extraction |
+| [Argon2id](https://en.wikipedia.org/wiki/Argon2) + [AES-256-GCM](https://en.wikipedia.org/wiki/Galois/Counter_Mode) (Rust) | Encryption at rest |
+| [SQLCipher](https://www.zetetic.net/sqlcipher/) (Rust via `rusqlite`) | Encrypted database |
+| [UniFFI](https://mozilla.github.io/uniffi-rs/) | Kotlin–Rust bridge |
+
 ## Security
 
 | Layer | Mechanism |
@@ -40,7 +57,7 @@ Encrypted document vault for Android — stores, views, organizes, and searches 
 
 ## Known Limitations (current build)
 
-- **No idle auto-lock** — the vault locks only when the app is backgrounded.
+- **No idle auto-lock** — the vault locks only when the app is closed.
 - **Collections & Tags** exist internally but are not reachable from the current UI and cannot be assigned to documents.
 - **No in-document search** — search covers the whole library, not find-within a PDF/EPUB.
 - **Barcodes are display-only** — passes show barcodes; there is no camera scanning.
@@ -65,6 +82,12 @@ Requires Android SDK 36 (`compileSdk`). Set `ANDROID_HOME` or create `local.prop
 sdk.dir=/path/to/Android/Sdk
 ```
 
+The Rust native library (`vault-native`) is auto-built by Gradle via UniFFI — no manual steps needed. Install the Rust toolchain if missing:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
 ## Testing
 
 ```sh
@@ -84,4 +107,4 @@ SHA-256: 11f860ee7ac19b8d992a52bf114a491f9b8b598091b7a5e94ce775b50e6e69fa
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE) for details.
+AGPL-3.0-only. See [LICENSE](LICENSE) for details.
