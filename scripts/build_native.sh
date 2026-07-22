@@ -23,6 +23,7 @@ for target in aarch64-linux-android x86_64-linux-android; do
     cargo build --manifest-path "$VAULT_DIR/Cargo.toml" --target "$target" --release
 done
 
+mkdir -p "$OUTPUT_DIR/jniLibs/arm64-v8a" "$OUTPUT_DIR/jniLibs/x86_64"
 cp "$VAULT_DIR/target/aarch64-linux-android/release/libvault_native.so" "$OUTPUT_DIR/jniLibs/arm64-v8a/"
 cp "$VAULT_DIR/target/x86_64-linux-android/release/libvault_native.so" "$OUTPUT_DIR/jniLibs/x86_64/"
 
@@ -36,6 +37,7 @@ echo "Done. Files updated in vault-native-android/src/main/."
 
 if [ "${1:-}" = "--apk" ]; then
     echo "Rebuilding debug APK..."
+    mkdir -p "$OUTPUT_DIR/jniLibs/arm64-v8a" "$OUTPUT_DIR/jniLibs/x86_64"
     touch "$OUTPUT_DIR/jniLibs/arm64-v8a/libvault_native.so" "$OUTPUT_DIR/jniLibs/x86_64/libvault_native.so"
     "$SCRIPT_DIR/../gradlew" -p "$SCRIPT_DIR/.." assembleDebug
 fi
