@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.3.0 (2026-07-18)
+## 0.3.0 (2026-07-22)
+
+### Features
+
+- **PDF viewer rewritten**: Dynamic render scale for pixel-perfect page width; `BoxWithConstraints` replaces `displayMetrics.widthPixels` for accurate layout (handles insets, multi-window, scaffold padding)
+- **Pinch-to-zoom**: Two-finger pinch zoom in PDF viewer (1x–5x), vertical scroll at zoomed-in levels
+- **Rust native library auto-build**: Gradle now builds Rust `vault-native` library automatically — generates UniFFI Kotlin bindings, compiles for Android, and packages the `.so` into the APK. No pre-committed build artifacts needed.
+
+### F-Droid
+
+- **F-Droid build recipe documented**: `F-DROID.md` covers MuPDF srclib, Rust toolchain, NDK config, and full recipe
+- **Rust version pinned**: `vault-native/rust-toolchain.toml` pins Rust 1.78.0 for reproducible builds
+- **NDK path hardcoding removed**: `.cargo/config.toml` deleted; NDK discovered automatically via `ANDROID_NDK_HOME` or `android.ndkDirectory`
 
 ### Fixes
 
@@ -13,6 +25,12 @@
 
 ### Technical
 
+- `renderPageBitmap()` accepts `targetWidthPx: Int?` instead of fixed `scale: Float`; `PdfViewer` passes `maxWidth.toPx()` from `BoxWithConstraints`
+- Gesture handler simplified: 2-finger zoom, 1-finger scroll only (no horizontal pan, no double-tap)
+- `MAX_CACHED_PAGES` reduced from 20 to 4
+- `*.so` files removed from git; generated bindings removed from git (both now built by Gradle)
+- F-Droid lint issue (`NewApi` in UniFFI `Cleaner`) suppressed
+- `scripts/build_native.sh` simplified and fixed — requires `ANDROID_NDK_HOME`
 - Added full-branch logging to `BackupManager.restoreContents()` (Branch A/B/C selection)
 - Added `backupUninstallReinstallImportCloseReopen` instrumented test covering full backup → wipe → restore → close → reopen cycle
 - Bumped to versionCode 3

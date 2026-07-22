@@ -1,3 +1,8 @@
-• Fixed search ANR when typing common queries
-• Fixed EPUB crash when opening from search results
-• Performance improvements for search result processing
+• Fixed crash when importing backup into existing database
+• Fixed database corruption ("file is not a database") after backup import
+• Fixed startup crash after failed database import
+• PIN lock default changed to disabled on fresh install
+• PDF viewer improvements: fixed layout width, simplified gestures
+• Rust native library auto-build integrated into Gradle
+• F-Droid build recipe documented and verified
+• Performance improvements and stability fixes
