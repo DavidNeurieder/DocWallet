@@ -100,15 +100,17 @@ noise.
 ## Rust native library (`vault-native`)
 
 LibreCrate uses a Rust library (`vault-native/core/`) exposed via UniFFI to
-Kotlin/JNA. The UniFFI Kotlin bindings are **pre-generated and committed**
-(`vault-native-android/src/main/java/uniffi/vault_native/vault_native.kt`), so
-F-Droid only needs to compile the Rust `.so` files.
+Kotlin/JNA. Neither the `.so` files nor the Kotlin bindings are committed to
+git. **Gradle handles everything automatically:**
 
-The `.so` files are **not committed to git**. Local development requires running
-`scripts/build_native.sh` before `./gradlew assembleDebug`. F-Droid builds them
-from source in the recipe below.
+1. Builds Rust for the host platform (`x86_64-unknown-linux-gnu`)
+2. Generates Kotlin UniFFI bindings from the host `.so`
+3. Builds Rust for Android (`aarch64-linux-android`)
+4. Copies the `.so` to `jniLibs/` before APK packaging
 
-### Recipe additions
+Prerequisites: Rustup, `cargo`, and Android NDK (set `ANDROID_NDK_HOME`).
+
+### Recipe
 
 ```yaml
 Builds:
@@ -128,49 +130,18 @@ Builds:
       - make -C libs/mupdf-android-fitz/libmupdf generate
       - echo 'include(":libs:mupdf-android-fitz")' >> settings.gradle.kts
       - sed -i 's|implementation(libs.mupdf.fitz)|implementation(project(":libs:mupdf-android-fitz"))|' app/build.gradle.kts
-      # Rust: install toolchain and build .so before Gradle
+      # Rust: install toolchain (host target x86_64-unknown-linux-gnu is default)
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - source $HOME/.cargo/env && rustup target add aarch64-linux-android
-      - |
-        export TOOLCHAIN="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64"
-        export CC_aarch64_linux_android="$TOOLCHAIN/bin/aarch64-linux-android26-clang"
-        export CC_x86_64_linux_android="$TOOLCHAIN/bin/x86_64-linux-android26-clang"
-        export AR_aarch64_linux_android="$TOOLCHAIN/bin/llvm-ar"
-        export AR_x86_64_linux_android="$TOOLCHAIN/bin/llvm-ar"
-        export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/bin/aarch64-linux-android26-clang"
-        export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$TOOLCHAIN/bin/x86_64-linux-android26-clang"
-        cargo build --manifest-path vault-native/Cargo.toml \
-          --target aarch64-linux-android --release &&
-        cp vault-native/target/aarch64-linux-android/release/libvault_native.so \
-          vault-native-android/src/main/jniLibs/arm64-v8a/
-      - |
-        cargo build --manifest-path vault-native/Cargo.toml \
-          --target x86_64-linux-android --release &&
-        cp vault-native/target/x86_64-linux-android/release/libvault_native.so \
-          vault-native-android/src/main/jniLibs/x86_64/
+    gradle:
+      - yes
     scandelete:
       - libs/mupdf-android-fitz/libmupdf/thirdparty
 ```
 
-### Minimal approach (recommended)
-
-Since the Kotlin bindings are pre-committed, only the `.so` build is needed.
-The `build` step above replaces the normal Gradle build for the native lib.
-
-Alternatively, if you prefer to keep the Gradle build as a single step, ensure
-the `.so` files are present *before* Gradle runs:
-
-```yaml
-prebuild:
-  # ... MuPDF prebuild steps ...
-  # Rust build before Gradle
-  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  - source $HOME/.cargo/env && rustup target add aarch64-linux-android
-  - # ... CC/CARGO_TARGET exports, cargo build, cp as above ...
-```
-
-In this approach the Gradle step is just `gradle: - yes` and the Rust `.so`
-files are already in `jniLibs/` before Gradle resolves.
+Gradle's `assembleRelease` task automatically runs the Rust build pipeline
+(bindings generation → Android `.so` → copy to jniLibs) before compiling the
+APK.
 
 ### Key details
 
@@ -178,19 +149,16 @@ files are already in `jniLibs/` before Gradle resolves.
 |------|-------|
 | Rust edition | 2021 |
 | UniFFI version | 0.28 (library mode, no `.udl` file) |
-| Targets | `aarch64-linux-android`, `x86_64-linux-android` |
-| NDK toolchain | Set via `CARGO_TARGET_*_LINKER`, `CC_*`, `AR_*` env vars pointing to `$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/` |
-| C Compiler | `aarch64-linux-android26-clang` / `x86_64-linux-android26-clang` |
-| Linker | `aarch64-linux-android26-clang` / `x86_64-linux-android26-clang` (via `CARGO_TARGET_*_LINKER`) |
+| Host target | `x86_64-unknown-linux-gnu` (default in Rustup, no action needed) |
+| Android target | `aarch64-linux-android` |
 | JNA | `net.java.dev.jna:jna:5.14.0@aar` (from Maven Central, no issue) |
 | Min API | 26 |
 
 ### Updating Rust
 
 1. Update the Rust source in `vault-native/core/`.
-2. Run `scripts/build_native.sh` locally to regenerate Kotlin bindings + `.so`.
-3. Commit the updated Kotlin bindings in `vault-native-android/.../vault_native.kt`.
-4. The F-Droid recipe only rebuilds the `.so` — bindings come from git.
+2. Run `./gradlew assembleDebug` — Gradle rebuilds everything automatically.
+3. No pre-committed artifacts to update.
 
 ## Updating MuPDF
 
