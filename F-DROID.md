@@ -110,6 +110,11 @@ git. **Gradle handles everything automatically:**
 
 Prerequisites: Rustup, `cargo`, and Android NDK (set `ANDROID_NDK_HOME`).
 
+Rust version is pinned via `vault-native/rust-toolchain.toml` (currently
+`1.78.0`). Rustup reads this file automatically and installs the correct
+version + Android target on first `cargo build`. No `rustup target add`
+needed in the recipe.
+
 ### Recipe
 
 ```yaml
@@ -130,9 +135,8 @@ Builds:
       - make -C libs/mupdf-android-fitz/libmupdf generate
       - echo 'include(":libs:mupdf-android-fitz")' >> settings.gradle.kts
       - sed -i 's|implementation(libs.mupdf.fitz)|implementation(project(":libs:mupdf-android-fitz"))|' app/build.gradle.kts
-      # Rust: install toolchain (host target x86_64-unknown-linux-gnu is default)
+      # Rust: install Rustup (rust-toolchain.toml handles version + targets)
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      - source $HOME/.cargo/env && rustup target add aarch64-linux-android
     gradle:
       - yes
     scandelete:
@@ -141,16 +145,17 @@ Builds:
 
 Gradle's `assembleRelease` task automatically runs the Rust build pipeline
 (bindings generation → Android `.so` → copy to jniLibs) before compiling the
-APK.
+APK. Rustup reads `vault-native/rust-toolchain.toml` during `cargo build` and
+installs the pinned Rust version + `aarch64-linux-android` target on the fly.
 
 ### Key details
 
 | Item | Value |
 |------|-------|
-| Rust edition | 2021 |
+| Rust version | Pinned via `vault-native/rust-toolchain.toml` (currently `1.78.0`) |
 | UniFFI version | 0.28 (library mode, no `.udl` file) |
 | Host target | `x86_64-unknown-linux-gnu` (default in Rustup, no action needed) |
-| Android target | `aarch64-linux-android` |
+| Android target | `aarch64-linux-android` (auto-installed by `rust-toolchain.toml`) |
 | JNA | `net.java.dev.jna:jna:5.14.0@aar` (from Maven Central, no issue) |
 | Min API | 26 |
 
