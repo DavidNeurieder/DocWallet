@@ -1,6 +1,7 @@
 use super::{DocumentReader, ReaderError, ReaderMeta, RenderedPage};
 use std::path::Path;
 
+#[derive(Debug)]
 pub struct PdfReader {
     inner: pdf_oxide::PdfDocument,
     page_count: u32,
@@ -68,5 +69,46 @@ impl DocumentReader for PdfReader {
             author: None,
             page_count: self.page_count,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn fixture(name: &str) -> std::path::PathBuf {
+        let dir = env!("CARGO_MANIFEST_DIR");
+        Path::new(dir).join("tests").join("fixtures").join(name)
+    }
+
+    #[test]
+    fn test_pdf_reader_open_single() {
+        let r = PdfReader::open(&fixture("test_1page.pdf")).unwrap();
+        assert_eq!(r.page_count, 1);
+    }
+
+    #[test]
+    fn test_pdf_reader_open_multi() {
+        let r = PdfReader::open(&fixture("test_2page.pdf")).unwrap();
+        assert_eq!(r.page_count, 2);
+    }
+
+    #[test]
+    fn test_pdf_reader_trait_dispatch() {
+        let r: Box<dyn DocumentReader> = Box::new(
+            PdfReader::open(&fixture("test_1page.pdf")).unwrap(),
+        );
+        assert_eq!(r.page_count().unwrap(), 1);
+        assert_eq!(r.extract_text(0).unwrap().trim(), "Test PDF content");
+        let (w, h) = r.page_size(0).unwrap();
+        assert!((w - 612.0).abs() < 0.1);
+        assert!((h - 792.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_open_nonexistent() {
+        let err = PdfReader::open(Path::new("/nonexistent/test.pdf")).unwrap_err();
+        assert!(matches!(err, ReaderError::OpenFailed(_)));
     }
 }

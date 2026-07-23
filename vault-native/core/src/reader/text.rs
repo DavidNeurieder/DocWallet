@@ -1,6 +1,7 @@
 use super::{DocumentReader, ReaderError, ReaderMeta};
 use std::path::Path;
 
+#[derive(Debug)]
 pub struct TextReader {
     content: String,
 }

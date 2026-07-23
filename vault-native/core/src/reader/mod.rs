@@ -5,6 +5,7 @@ pub mod text;
 pub mod pdf;
 
 /// Data from rendering a single page.
+#[derive(Debug)]
 pub struct RenderedPage {
     pub data: Vec<u8>,
     pub width: u32,
@@ -12,6 +13,7 @@ pub struct RenderedPage {
 }
 
 /// Basic document metadata.
+#[derive(Debug)]
 pub struct ReaderMeta {
     pub title: Option<String>,
     pub author: Option<String>,
@@ -54,7 +56,7 @@ impl From<std::io::Error> for ReaderError {
 /// Trait for all document format readers.
 ///
 /// New formats implement this trait and register themselves in [`open`].
-pub trait DocumentReader: Send {
+pub trait DocumentReader: Send + std::fmt::Debug {
     fn page_count(&self) -> Result<u32, ReaderError>;
     fn extract_text(&self, page_index: u32) -> Result<String, ReaderError>;
 
