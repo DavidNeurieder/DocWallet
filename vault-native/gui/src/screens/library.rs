@@ -117,6 +117,7 @@ impl State {
                 if let Some(doc) = self.documents.iter().find(|d| d.id == id) {
                     return Task::done(crate::app::Message::Navigate(Navigation::OpenDocument(
                         doc.clone(),
+                        self.vault.clone(),
                     )));
                 }
                 Task::none()

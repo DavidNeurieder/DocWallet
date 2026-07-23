@@ -17,5 +17,5 @@ pub enum Navigation {
     Settings(Arc<Vault>),
     Export(Arc<Vault>),
     Collections(Arc<Vault>),
-    OpenDocument(DocumentRow),
+    OpenDocument(DocumentRow, Arc<Vault>),
 }

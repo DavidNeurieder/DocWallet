@@ -144,6 +144,27 @@ impl Vault {
         Ok(self.db.list_tags()?)
     }
 
+    pub fn open_document(&self, doc: &DocumentRow) -> Result<()> {
+        let data = self.db.export_document_file(
+            self.base_dir.to_string_lossy().to_string(),
+            doc.id.clone(),
+        )?
+        .ok_or_else(|| anyhow::anyhow!("File data not found for {}", doc.id))?;
+
+        let tmp_dir = tempfile::TempDir::new()?;
+        let tmp_path = tmp_dir.path().join(&doc.file_name);
+        std::fs::write(&tmp_path, &data)?;
+
+        open::that(&tmp_path)?;
+
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(120));
+            drop(tmp_dir);
+        });
+
+        Ok(())
+    }
+
     pub fn import_file(&self, path: &Path) -> Result<String> {
         let file_data = std::fs::read(path)?;
         let file_name = path

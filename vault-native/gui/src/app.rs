@@ -1,11 +1,27 @@
 use iced::{Element, Subscription, Task, Theme};
+use std::collections::VecDeque;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::config::Config;
+use crate::dnd;
 use crate::keychain::SecureStore;
-use crate::opener::{DocumentOpener, SystemOpener};
 use crate::screens::{self, Navigation};
+
+struct DndPending(Arc<Mutex<VecDeque<PathBuf>>>);
+
+impl Clone for DndPending {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl Hash for DndPending {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.0).hash(state);
+    }
+}
 
 pub enum Screen {
     FirstRun(screens::first_run::State),
@@ -26,24 +42,50 @@ pub enum Message {
     Collections(screens::collections::Message),
     Navigate(Navigation),
     FileDropped(PathBuf),
+    WindowReady(Option<u32>),
 }
 
 pub struct App {
     pub screen: Screen,
     pub _keychain: SecureStore,
     pub config: Config,
-    pub _opener: SystemOpener,
+    pub dnd: dnd::Dnd,
+    pub dnd_pending: Arc<Mutex<VecDeque<PathBuf>>>,
 }
 
 pub fn boot() -> (App, Task<Message>) {
     let config = Config::load();
     let keychain = SecureStore::new("com.librecrate.desktop");
 
+    let dnd = dnd::Dnd::new();
+    let dnd_pending = dnd.pending();
+
     let vault_exists = config
         .vault_dir
         .as_ref()
         .map(|d| d.join("encryption").join("master_key").exists())
         .unwrap_or(false);
+
+    // Request the X11 window XID after the window is created
+    let xid_task = iced::window::latest().then(|maybe_id| {
+        match maybe_id {
+            Some(id) => iced::window::run(id, |window| {
+                match window.window_handle().ok() {
+                    Some(handle) => match handle.as_raw() {
+                        iced::window::raw_window_handle::RawWindowHandle::Xlib(h) => {
+                            Some(h.window as u32)
+                        }
+                        iced::window::raw_window_handle::RawWindowHandle::Xcb(h) => {
+                            Some(h.window.get())
+                        }
+                        _ => None,
+                    },
+                    None => None,
+                }
+            }),
+            None => Task::done(None),
+        }
+    });
 
     if vault_exists {
         let unlock = screens::unlock::State::new();
@@ -52,9 +94,10 @@ pub fn boot() -> (App, Task<Message>) {
                 screen: Screen::Unlock(unlock),
                 _keychain: keychain,
                 config,
-                _opener: SystemOpener,
+                dnd,
+                dnd_pending,
             },
-            Task::none(),
+            xid_task.map(Message::WindowReady),
         )
     } else {
         let first_run = screens::first_run::State::new();
@@ -63,9 +106,10 @@ pub fn boot() -> (App, Task<Message>) {
                 screen: Screen::FirstRun(first_run),
                 _keychain: keychain,
                 config,
-                _opener: SystemOpener,
+                dnd,
+                dnd_pending,
             },
-            Task::none(),
+            xid_task.map(Message::WindowReady),
         )
     }
 }
@@ -115,6 +159,14 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::Navigate(nav) => handle_navigation(app, nav),
+        Message::WindowReady(Some(xid)) => {
+            app.dnd.start(xid);
+            Task::none()
+        }
+        Message::WindowReady(None) => {
+            tracing::warn!("Could not extract X11 window ID for DnD");
+            Task::none()
+        }
         Message::FileDropped(path) => {
             if let Screen::Library(ref mut state) = app.screen {
                 let vault = state.vault.clone();
@@ -174,13 +226,8 @@ fn handle_navigation(app: &mut App, nav: Navigation) -> Task<Message> {
             app.screen = Screen::Collections(state);
             Task::none()
         }
-        Navigation::OpenDocument(doc) => {
-            let base_dir = app
-                .config
-                .vault_dir
-                .clone()
-                .unwrap_or_else(Config::vault_data_dir);
-            if let Err(e) = app._opener.open(&doc, &base_dir) {
+        Navigation::OpenDocument(doc, vault) => {
+            if let Err(e) = vault.open_document(&doc) {
                 tracing::error!("Failed to open document: {e}");
             }
             Task::none()
@@ -199,8 +246,31 @@ pub fn view(app: &App) -> Element<'_, Message> {
     }
 }
 
-pub fn subscription(_state: &App) -> Subscription<Message> {
-    iced::event::listen_with(drop_event_handler)
+pub fn subscription(state: &App) -> Subscription<Message> {
+    let mut subs: Vec<Subscription<Message>> = Vec::new();
+    subs.push(iced::event::listen_with(drop_event_handler));
+
+    #[cfg(target_os = "linux")]
+    {
+        use iced::futures::stream::unfold;
+
+        let pending = DndPending(state.dnd_pending.clone());
+        let dnd_sub = Subscription::run_with(pending, |p| {
+            let queue = p.0.clone();
+            unfold(queue, |queue| async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    let path = queue.lock().unwrap().pop_front();
+                    if let Some(path) = path {
+                        return Some((Message::FileDropped(path), queue));
+                    }
+                }
+            })
+        });
+        subs.push(dnd_sub);
+    }
+
+    Subscription::batch(subs)
 }
 
 fn drop_event_handler(
