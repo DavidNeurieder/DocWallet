@@ -1,9 +1,6 @@
 package com.librecrate.app.reader.pdf
 
 import android.graphics.Bitmap
-import com.artifex.mupdf.fitz.ColorSpace
-import com.artifex.mupdf.fitz.Document
-import com.artifex.mupdf.fitz.Matrix
 import com.librecrate.app.vault.reader.DocumentReader
 import com.librecrate.app.vault.reader.RenderConfig
 import com.librecrate.app.vault.reader.RenderedPage
@@ -11,23 +8,19 @@ import com.librecrate.app.vault.reader.models.DocumentMetadata
 import com.librecrate.app.vault.reader.models.ReaderLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import uniffi.vault_native.Document as NativeDocument
 import java.nio.ByteBuffer
 
 class PdfDocumentReader(filePath: String) : DocumentReader {
 
-    private val document: Document = try {
-        Document.openDocument(filePath)
-    } catch (e: Exception) {
-        throw RuntimeException("Failed to open PDF: $filePath", e)
-    }
+    private val document = NativeDocument.open(filePath, "application/pdf")
 
-    override val pageCount: Int by lazy { document.countPages() }
+    override val pageCount: Int by lazy { document.pageCount().toInt() }
 
     override val metadata: DocumentMetadata by lazy {
         DocumentMetadata(
-            title = document.getMetaData(Document.META_INFO_TITLE)
-                ?.takeIf { it.isNotBlank() } ?: "",
-            author = document.getMetaData(Document.META_INFO_AUTHOR) ?: "",
+            title = "",
+            author = "",
             pageCount = pageCount,
         )
     }
@@ -37,35 +30,25 @@ class PdfDocumentReader(filePath: String) : DocumentReader {
     }
 
     fun renderPageBitmap(pageIndex: Int, targetWidthPx: Int? = null): Bitmap {
-        val page = document.loadPage(pageIndex)
-        try {
-            val pageWidthPoints = (page.bounds.x1 - page.bounds.x0).toDouble()
-            val scale = if (targetWidthPx != null && targetWidthPx > 0 && pageWidthPoints > 0.0 && page.bounds.isValid) {
-                targetWidthPx.toFloat() / pageWidthPoints.toFloat()
-            } else {
-                (150f / 72f)
-            }
-            val matrix = Matrix(scale, 0f, 0f, scale, 0f, 0f)
-            val pixmap = page.toPixmap(matrix, ColorSpace.DeviceRGB, true)
-            try {
-                val bitmap = Bitmap.createBitmap(
-                    pixmap.width, pixmap.height,
-                    Bitmap.Config.ARGB_8888,
-                )
-                bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixmap.samples))
-                compositeOverWhite(bitmap)
-                return bitmap
-            } finally {
-                pixmap.destroy()
-            }
-        } finally {
-            page.destroy()
+        val pageW = document.pageWidth(pageIndex.toUInt())
+        val scale = if (targetWidthPx != null && targetWidthPx > 0 && pageW > 0f) {
+            targetWidthPx * 72f / (pageW * 150f)
+        } else {
+            1.0f
         }
+        val rawData = document.renderPage(pageIndex.toUInt(), scale)
+        val width = document.renderPageWidth(pageIndex.toUInt(), scale)
+        val height = document.renderPageHeight(pageIndex.toUInt(), scale)
+
+        val bitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rawData))
+        compositeOverWhite(bitmap)
+        return bitmap
     }
 
     override suspend fun renderPage(pageIndex: Int, config: RenderConfig): RenderedPage {
         return withContext(Dispatchers.IO) {
-            val bitmap = renderPageBitmap(pageIndex)
+            val bitmap = renderPageBitmap(pageIndex, targetWidthPx = config.width)
             try {
                 val buffer = ByteBuffer.allocate(bitmap.byteCount)
                 bitmap.copyPixelsToBuffer(buffer)
@@ -81,24 +64,7 @@ class PdfDocumentReader(filePath: String) : DocumentReader {
     }
 
     override fun extractText(): String? {
-        return buildString {
-            for (i in 0 until pageCount) {
-                val page = document.loadPage(i)
-                try {
-                    val stext = page.toStructuredText()
-                    try {
-                        val text = stext.asText()
-                        if (text.isNotBlank()) {
-                            appendLine(text)
-                        }
-                    } finally {
-                        stext.destroy()
-                    }
-                } finally {
-                    page.destroy()
-                }
-            }
-        }.takeIf { it.isNotBlank() }
+        return document.extractAllText().takeIf { it.isNotBlank() }
     }
 
     override fun close() {

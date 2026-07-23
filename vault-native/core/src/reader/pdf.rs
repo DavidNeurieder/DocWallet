@@ -37,6 +37,12 @@ impl DocumentReader for PdfReader {
             .map_err(|e| ReaderError::ExtractFailed(e.to_string()))
     }
 
+    fn page_size(&self, page_index: u32) -> Result<(f32, f32), ReaderError> {
+        let info = self.inner.get_page_info(page_index as usize)
+            .map_err(|e| ReaderError::ExtractFailed(e.to_string()))?;
+        Ok((info.media_box.width, info.media_box.height))
+    }
+
     fn render_page(&self, page_index: u32, scale: f32) -> Result<RenderedPage, ReaderError> {
         let dpi = (150.0 * scale) as u32;
         let options = pdf_oxide::rendering::RenderOptions::with_dpi(dpi).as_raw();

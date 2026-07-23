@@ -11,6 +11,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import uniffi.vault_native.Document as NativeDocument
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
@@ -32,7 +33,7 @@ class PdfViewerInstrumentedTest {
     fun rendersPdfPageAsImage() {
         val file = copyResourceToCache("test_1page.pdf")
 
-        verifyMuPDFCanOpen(file, 1)
+        verifyNativeCanOpen(file, 1)
 
         val doc = Document(
             id = "pdf-inst-test",
@@ -56,7 +57,7 @@ class PdfViewerInstrumentedTest {
     fun doesNotShowFallbackTextWhenRenderingSucceeds() {
         val file = copyResourceToCache("test_1page.pdf")
 
-        verifyMuPDFCanOpen(file, 1)
+        verifyNativeCanOpen(file, 1)
 
         val doc = Document(
             id = "pdf-inst-no-fallback",
@@ -80,7 +81,7 @@ class PdfViewerInstrumentedTest {
     fun rendersMultiPagePdf() {
         val file = copyResourceToCache("test_2page.pdf")
 
-        verifyMuPDFCanOpen(file, 2)
+        verifyNativeCanOpen(file, 2)
 
         val doc = Document(
             id = "pdf-inst-multi",
@@ -111,7 +112,7 @@ class PdfViewerInstrumentedTest {
     fun opensAtSavedPageOnRestore() {
         val file = copyResourceToCache("test_2page.pdf")
 
-        verifyMuPDFCanOpen(file, 2)
+        verifyNativeCanOpen(file, 2)
 
         val doc = Document(
             id = "pdf-restore-test",
@@ -156,7 +157,7 @@ class PdfViewerInstrumentedTest {
         assertTrue("PDF should contain the body text", rawText.contains(bodyText))
     }
 
-    private fun verifyMuPDFCanOpen(file: File, expectedPages: Int) {
+    private fun verifyNativeCanOpen(file: File, expectedPages: Int) {
         val fileInfo = "path=${file.absolutePath} exists=${file.exists()} size=${file.length()}"
         assertTrue("Cannot process PDF - $fileInfo", file.exists() && file.length() > 0)
         if (!file.exists() || file.length() == 0L) return
@@ -168,12 +169,12 @@ class PdfViewerInstrumentedTest {
         assertTrue("PDF header missing: $firstBytes", firstBytes.startsWith("%PDF"))
 
         val doc = try {
-            com.artifex.mupdf.fitz.Document.openDocument(file.absolutePath)
+            NativeDocument.open(file.absolutePath, "application/pdf")
         } catch (e: Exception) {
-            throw AssertionError("MuPDF openDocument failed for $fileInfo: ${e.message}", e)
+            throw AssertionError("NativeDocument.open failed for $fileInfo: ${e.message}", e)
         }
         try {
-            val actualPages = doc.countPages()
+            val actualPages = doc.pageCount().toInt()
             assertTrue("Expected $expectedPages pages, got $actualPages", actualPages == expectedPages)
         } finally {
             doc.destroy()

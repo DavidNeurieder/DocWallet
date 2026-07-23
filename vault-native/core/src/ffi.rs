@@ -825,6 +825,16 @@ impl Document {
         Ok(page.height)
     }
 
+    pub fn page_width(&self, page_index: u32) -> Result<f32, crate::error::Error> {
+        let (w, _) = self.inner.lock().unwrap().page_size(page_index)?;
+        Ok(w)
+    }
+
+    pub fn page_height(&self, page_index: u32) -> Result<f32, crate::error::Error> {
+        let (_, h) = self.inner.lock().unwrap().page_size(page_index)?;
+        Ok(h)
+    }
+
     pub fn render_thumbnail(&self) -> Result<Vec<u8>, crate::error::Error> {
         Ok(self.inner.lock().unwrap().render_thumbnail()?)
     }

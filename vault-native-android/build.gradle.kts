@@ -100,7 +100,7 @@ val generatedBindingsDir = layout.buildDirectory.dir("generated/java").get().asF
 val buildHostRustLib by tasks.registering(Exec::class) {
     description = "Build Rust library for host platform"
     workingDir = vaultProjectDir
-    commandLine("cargo", "build", "-p", "vault-native", "--target", hostTarget)
+    commandLine("cargo", "build", "-p", "vault-native", "--target", hostTarget, "--features", "pdf")
     inputs.files(rustSource)
     outputs.file(hostLibFile)
     ensureCargoOnPath()
@@ -112,7 +112,7 @@ val generateKotlinBindings by tasks.registering(Exec::class) {
     dependsOn(buildHostRustLib)
     workingDir = vaultProjectDir
     commandLine(
-        "cargo", "run", "-p", "vault-native", "--example", "gen_kotlin", "--",
+        "cargo", "run", "-p", "vault-native", "--features", "pdf", "--example", "gen_kotlin", "--",
         hostLibFile.absolutePath,
         generatedBindingsDir.absolutePath
     )
@@ -126,7 +126,7 @@ val buildAndroidRustLib by tasks.registering(Exec::class) {
     description = "Build Rust library for Android (arm64-v8a)"
     dependsOn(generateKotlinBindings)
     workingDir = vaultProjectDir
-    commandLine("cargo", "build", "-p", "vault-native", "--target", androidTarget, "--release")
+    commandLine("cargo", "build", "-p", "vault-native", "--target", androidTarget, "--release", "--features", "pdf")
     inputs.files(rustSource)
     outputs.file(androidLibFile)
     ensureCargoOnPath()

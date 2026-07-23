@@ -73,6 +73,11 @@ pub trait DocumentReader: Send {
         Err(ReaderError::NotSupported("render_page".into()))
     }
 
+    /// Returns the page dimensions in points (width, height).
+    fn page_size(&self, _page_index: u32) -> Result<(f32, f32), ReaderError> {
+        Err(ReaderError::NotSupported("page_size".into()))
+    }
+
     /// Render first page as a PNG thumbnail.
     /// Returns `Err(NotSupported)` by default — override for formats that support rendering.
     fn render_thumbnail(&self) -> Result<Vec<u8>, ReaderError> {
