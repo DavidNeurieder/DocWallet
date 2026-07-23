@@ -16,6 +16,7 @@ fn main() -> iced::Result {
         .init();
 
     iced::application(app::boot, app::update, app::view)
+        .subscription(app::subscription)
         .title("LibreCrate")
         .theme(app::theme)
         .run()

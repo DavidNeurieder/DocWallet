@@ -23,6 +23,7 @@ pub enum Message {
     Imported(Result<String, String>),
     DocumentsLoaded(Result<Vec<DocumentRow>, String>),
     SearchResultsLoaded(Vec<FtsSnippetResult>),
+    DropResult(Result<usize, String>),
 }
 
 pub struct State {
@@ -171,6 +172,15 @@ impl State {
                 self.reload()
             }
             Message::Imported(Err(e)) => {
+                self.error = Some(e);
+                Task::none()
+            }
+            Message::DropResult(Ok(_count)) => {
+                self.loading = true;
+                self.error = None;
+                self.reload()
+            }
+            Message::DropResult(Err(e)) => {
                 self.error = Some(e);
                 Task::none()
             }
@@ -378,6 +388,25 @@ mod tests {
         state.loading = false;
         let _ = state.update(Message::Imported(Err("import failed".into())));
         assert_eq!(state.error, Some("import failed".into()));
+        assert!(!state.loading);
+    }
+
+    #[test]
+    fn test_drop_result_ok_triggers_reload() {
+        let vault = make_test_vault();
+        let (mut state, _task) = State::new(vault);
+        state.loading = false;
+        let _ = state.update(Message::DropResult(Ok(3)));
+        assert!(state.loading);
+    }
+
+    #[test]
+    fn test_drop_result_error_sets_state() {
+        let vault = make_test_vault();
+        let (mut state, _task) = State::new(vault);
+        state.loading = false;
+        let _ = state.update(Message::DropResult(Err("drop failed".into())));
+        assert_eq!(state.error, Some("drop failed".into()));
         assert!(!state.loading);
     }
 

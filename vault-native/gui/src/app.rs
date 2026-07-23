@@ -1,11 +1,11 @@
-use iced::{Element, Task, Theme};
+use iced::{Element, Subscription, Task, Theme};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::config::Config;
 use crate::keychain::SecureStore;
 use crate::opener::{DocumentOpener, SystemOpener};
 use crate::screens::{self, Navigation};
-use crate::vault;
 
 pub enum Screen {
     FirstRun(screens::first_run::State),
@@ -25,6 +25,7 @@ pub enum Message {
     Export(screens::export::Message),
     Collections(screens::collections::Message),
     Navigate(Navigation),
+    FileDropped(PathBuf),
 }
 
 pub struct App {
@@ -114,6 +115,35 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::Navigate(nav) => handle_navigation(app, nav),
+        Message::FileDropped(path) => {
+            if let Screen::Library(ref mut state) = app.screen {
+                let vault = state.vault.clone();
+                return Task::perform(
+                    async move {
+                        tokio::task::spawn_blocking(move || -> Result<usize, String> {
+                            if path.is_dir() {
+                                let mut count = 0;
+                                for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
+                                    let entry = entry.map_err(|e| e.to_string())?;
+                                    let child = entry.path();
+                                    if child.is_file() {
+                                        vault.import_file(&child).map_err(|e| e.to_string())?;
+                                        count += 1;
+                                    }
+                                }
+                                Ok(count)
+                            } else {
+                                vault.import_file(&path).map(|_| 1).map_err(|e| e.to_string())
+                            }
+                        })
+                        .await
+                        .map_err(|e| e.to_string())?
+                    },
+                    |result| Message::Library(screens::library::Message::DropResult(result)),
+                );
+            }
+            Task::none()
+        }
     }
 }
 
@@ -166,6 +196,23 @@ pub fn view(app: &App) -> Element<'_, Message> {
         Screen::Settings(state) => state.view().map(Message::Settings),
         Screen::Export(state) => state.view().map(Message::Export),
         Screen::Collections(state) => state.view().map(Message::Collections),
+    }
+}
+
+pub fn subscription(_state: &App) -> Subscription<Message> {
+    iced::event::listen_with(drop_event_handler)
+}
+
+fn drop_event_handler(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    match event {
+        iced::Event::Window(iced::window::Event::FileDropped(path)) => {
+            Some(Message::FileDropped(path))
+        }
+        _ => None,
     }
 }
 
