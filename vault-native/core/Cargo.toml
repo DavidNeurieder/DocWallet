@@ -23,6 +23,11 @@ rand = "0.8"
 anyhow = "1"
 thiserror = "1"
 uniffi = "0.28"
+pdf_oxide = { version = "0.3", features = ["rendering"], optional = true }
+
+[features]
+default = []
+pdf = ["pdf_oxide"]
 
 [build-dependencies]
 uniffi = { version = "0.28", features = ["build"] }

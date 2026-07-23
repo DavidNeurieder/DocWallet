@@ -177,6 +177,14 @@ impl Vault {
             .to_string();
         let id = uuid::Uuid::new_v4().to_string();
 
+        let text_content = if mime.starts_with("text/") {
+            vault_native::pdf::extract_text_file(path)
+        } else if mime == "application/pdf" {
+            vault_native::pdf::extract_pdf_text(path)
+        } else {
+            None
+        };
+
         let id = self.db.import_document(
             self.base_dir.to_string_lossy().to_string(),
             id,
@@ -185,7 +193,7 @@ impl Vault {
             mime,
             String::new(),
             String::new(),
-            None,
+            text_content,
         )?;
         Ok(id)
     }
