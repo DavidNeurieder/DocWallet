@@ -23,7 +23,7 @@ rand = "0.8"
 anyhow = "1"
 thiserror = "1"
 uniffi = "0.28"
-pdf_oxide = { version = "0.3", features = ["rendering"], optional = true }
+pdf_oxide = { git = "https://github.com/DavidNeurieder/pdf_oxide", rev = "06723e11", features = ["rendering", "cjk-render-fallback"], optional = true }
 
 [features]
 default = []

@@ -1172,7 +1172,7 @@ checksum = "173852283a9a57a3cbe365d86e74dc428a09c50421477d5ad6fe9d9509e37737"
 dependencies = [
  "bitflags 2.13.1",
  "fontdb",
- "harfrust",
+ "harfrust 0.3.2",
  "linebender_resource_handle",
  "log",
  "rangemap",
@@ -1678,6 +1678,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
 
 [[package]]
+name = "fax"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70ed8646f3993cad0585c6669ffba6f7e5440a0bfb0a1f16600cae33ce7cf307"
+
+[[package]]
 name = "fdeflate"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2147,6 +2153,18 @@ dependencies = [
  "bytemuck",
  "core_maths",
  "read-fonts 0.35.0",
+ "smallvec",
+]
+
+[[package]]
+name = "harfrust"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "read-fonts 0.41.0",
  "smallvec",
 ]
 
@@ -4015,8 +4033,7 @@ checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 [[package]]
 name = "pdf_oxide"
 version = "0.3.74"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b97a8330bf3a3a4011ad84704b3bdcb9b0ef3fd5b03a1bdc371dde40bee1689"
+source = "git+https://github.com/DavidNeurieder/pdf_oxide?rev=06723e11#06723e113a37ee9737c1eb322ea346b42555fbd0"
 dependencies = [
  "aes 0.9.1",
  "base64",
@@ -4029,10 +4046,11 @@ dependencies = [
  "encoding_rs",
  "env_logger",
  "fast_image_resize",
- "fax",
+ "fax 0.3.0",
  "flate2",
  "fontdb",
  "getrandom 0.4.3",
+ "harfrust 0.12.0",
  "hayro-jbig2",
  "hayro-jpeg2000",
  "image",
@@ -4047,7 +4065,6 @@ dependencies = [
  "qcms",
  "quick-xml",
  "regex",
- "rustybuzz",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -5517,7 +5534,7 @@ version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b63feaf3343d35b6ca4d50483f94843803b0f51634937cc2ec519fc32232bc52"
 dependencies = [
- "fax",
+ "fax 0.2.7",
  "flate2",
  "half",
  "quick-error",
