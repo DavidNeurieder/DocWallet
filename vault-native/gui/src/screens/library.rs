@@ -1,5 +1,5 @@
 use iced::{
-    widget::{button, column, container, row, scrollable, text, text_input, Column, Row},
+    widget::{button, column, container, image, row, scrollable, text, text_input, Column, Row},
     Element, Task, Length,
 };
 use std::collections::HashMap;
@@ -26,7 +26,7 @@ pub enum Message {
     DocumentsLoaded(Result<Vec<DocumentRow>, String>),
     SearchResultsLoaded(Vec<FtsSnippetResult>),
     DropResult(Result<usize, String>),
-    ThumbnailLoaded(String, Vec<u8>),
+    ThumbnailLoaded(String, image::Handle),
     Noop,
 }
 
@@ -37,7 +37,7 @@ pub struct State {
     pub search_results: Option<Vec<FtsSnippetResult>>,
     pub loading: bool,
     pub error: Option<String>,
-    pub thumbnails: HashMap<String, Vec<u8>>,
+    pub thumbnails: HashMap<String, image::Handle>,
 }
 
 impl State {
@@ -167,8 +167,13 @@ impl State {
                                 .flatten()
                         },
                         move |thumb| {
-                            thumb.map(|data| crate::app::Message::Library(Message::ThumbnailLoaded(id, data)))
-                                .unwrap_or(crate::app::Message::Library(Message::Noop))
+                            let msg = thumb
+                                .map(|data| {
+                                    let handle = image::Handle::from_bytes(data);
+                                    crate::app::Message::Library(Message::ThumbnailLoaded(id, handle))
+                                })
+                                .unwrap_or(crate::app::Message::Library(Message::Noop));
+                            msg
                         },
                     )
                 }).collect();
@@ -334,8 +339,7 @@ impl State {
                             .fold(
                                 Row::new().spacing(12).width(Length::Fill),
                                 |row, doc| {
-                                    let thumb =
-                                        self.thumbnails.get(&doc.id).map(|d| d.as_slice());
+                                    let thumb = self.thumbnails.get(&doc.id);
                                     row.push(document_card::view(doc, thumb))
                                 },
                             )

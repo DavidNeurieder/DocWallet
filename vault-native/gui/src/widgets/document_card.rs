@@ -22,11 +22,10 @@ fn mime_badge(mime_type: &str) -> (&'static str, Color) {
 
 pub fn view<'a>(
     doc: &'a DocumentRow,
-    thumbnail: Option<&'a [u8]>,
+    thumbnail: Option<&'a image::Handle>,
 ) -> Element<'a, library::Message> {
-    let thumb_element: iced::Element<'a, library::Message> = if let Some(bytes) = thumbnail {
-        let handle = image::Handle::from_bytes(bytes.to_vec());
-        image::Image::new(handle)
+    let thumb_element: iced::Element<'a, library::Message> = if let Some(handle) = thumbnail {
+        image::Image::new(handle.clone())
             .width(Length::Fill)
             .height(110)
             .into()
