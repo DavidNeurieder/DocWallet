@@ -105,19 +105,14 @@ impl State {
                 Task::none()
             }
             Message::ToggleFavorite(id) => {
+                if let Some(doc) = self.documents.iter_mut().find(|d| d.id == id) {
+                    doc.is_favorite = !doc.is_favorite;
+                }
                 let vault = self.vault.clone();
-                Task::perform(
-                    async move {
-                        tokio::task::spawn_blocking(move || {
-                            vault.toggle_favorite(id).ok();
-                        })
-                        .await
-                        .ok();
-                    },
-                    |_| {
-                        crate::app::Message::Library(Message::SearchChanged(String::new()))
-                    },
-                )
+                std::thread::spawn(move || {
+                    let _ = vault.toggle_favorite(id);
+                });
+                Task::none()
             }
             Message::OpenDocument(id) => {
                 if let Some(doc) = self.documents.iter().find(|d| d.id == id) {
